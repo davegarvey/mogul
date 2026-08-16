@@ -1,0 +1,736 @@
+import {
+  DEFAULT_RULES,
+  buildCost,
+  pathCosts,
+  playerById,
+  propertyDef,
+  slotCost,
+  slotsForEra,
+} from "@mogul/engine";
+import type { GameState, GameRules, TalentTrackId } from "@mogul/engine";
+import type { ClientMessage, RoomState, ServerMessage, SnapshotEnvelope } from "@mogul/protocol";
+import { CITY_POS, EDGE_LABELS, EDGE_ROUTES, REGION_ANCHOR, REGION_POLYGON, VIEWBOX, assertLayoutComplete } from "./map-layout.js";
+
+const R = DEFAULT_RULES;
+const NS = "http://www.w3.org/2000/svg";
+
+const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+
+const storage = {
+  get nickname(): string | null {
+    return localStorage.getItem("mogul:nickname");
+  },
+  set nickname(v: string) {
+    localStorage.setItem("mogul:nickname", v);
+  },
+  get code(): string | null {
+    return localStorage.getItem("mogul:code");
+  },
+  set code(v: string) {
+    localStorage.setItem("mogul:code", v);
+  },
+  clear(): void {
+    localStorage.removeItem("mogul:nickname");
+    localStorage.removeItem("mogul:code");
+  },
+};
+
+let ws: WebSocket | null = null;
+let nickname = storage.nickname ?? "";
+let room: RoomState | null = null;
+let snapshot: SnapshotEnvelope | null = null;
+let mySeatId: string | null = null;
+let myIsHost = false;
+let clockDeadline: number | null = null;
+
+function showView(name: "join" | "lobby" | "game"): void {
+  for (const v of ["view-join", "view-lobby", "view-game"]) {
+    $(v).classList.toggle("active", v === `view-${name}`);
+  }
+}
+
+function connect(): void {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}`);
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data as string) as ServerMessage;
+    handle(msg);
+  };
+  ws.onclose = () => {
+    // Reconnect: rejoin the room with the same nickname and re-render from the fresh snapshot.
+    if (storage.code && storage.nickname) {
+      setTimeout(() => connect(), 1000);
+    } else {
+      showView("join");
+    }
+  };
+}
+
+function send(msg: ClientMessage): void {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+}
+
+function handle(msg: ServerMessage): void {
+  switch (msg.type) {
+    case "room-state":
+      room = msg.room;
+      mySeatId = msg.room.seats.find((s) => s.nickname === nickname)?.id ?? null;
+      myIsHost = msg.room.seats.find((s) => s.nickname === nickname)?.isHost ?? false;
+      renderLobby();
+      break;
+    case "snapshot":
+      snapshot = msg.snapshot;
+      renderGame();
+      break;
+    case "reject":
+      flash(msg.reason);
+      break;
+    case "error":
+      flash(msg.reason);
+      break;
+    case "game-ended":
+      flash(`Game over — winner: ${msg.winnerId}`);
+      break;
+    case "chat":
+      break;
+  }
+}
+
+function flash(text: string): void {
+  const log = $("log");
+  const line = document.createElement("div");
+  line.textContent = `! ${text}`;
+  log.prepend(line);
+}
+
+function renderLobby(): void {
+  if (!room) return;
+  showView(room.status === "playing" || room.status === "ended" ? "game" : "lobby");
+  $("room-code").textContent = room.code;
+  $("lobby-status").textContent = room.status;
+  const configEl = $("room-config");
+  configEl.textContent = `Move clock: ${room.config.clockSeconds}s per turn · Disconnect grace: ${room.config.graceSeconds}s (then a bot takes over)`;
+  const roster = $("roster");
+  roster.innerHTML = "";
+  for (const seat of room.seats) {
+    const div = document.createElement("div");
+    div.textContent = `${seat.nickname} — ${seat.kind}${seat.botControlled ? " (bot-controlled)" : ""}${seat.isHost ? " (host)" : ""}`;
+    roster.append(div);
+  }
+  ($("btn-start") as HTMLButtonElement).disabled = !myIsHost || room.seats.length < 2;
+  ($("btn-add-bot") as HTMLButtonElement).disabled = !myIsHost || room.seats.length >= room.config.maxPlayers;
+}
+
+function renderGame(): void {
+  if (!snapshot) return;
+  const s = snapshot.state;
+  showView("game");
+
+  document.body.className = `era-${s.era}`;
+  $("era-pill").textContent = `Era: ${s.era}`;
+  $("phase-pill").textContent = `Phase: ${s.phase}`;
+  $("round-pill").textContent = `Round ${s.round}`;
+  clockDeadline = snapshot.clockDeadline ?? null;
+  renderTurnPill();
+
+  renderPlayers(s);
+  renderMarket(s);
+  renderTalent(s);
+  renderTurnOrder(s);
+  renderMap(s);
+  renderLog(s);
+  renderActions();
+}
+
+/** Turn banner: whose move it is and how much clock remains. */
+function renderTurnPill(): void {
+  const pill = $("turn-pill");
+  const snap = snapshot;
+  if (!snap) {
+    pill.textContent = "";
+    return;
+  }
+  if (snap.ended) {
+    pill.textContent = "Game over";
+    pill.classList.remove("urgent");
+    return;
+  }
+  if (snap.activeSeat === null) {
+    pill.textContent = "Automatic phase…";
+    pill.classList.remove("urgent");
+    return;
+  }
+  const who = snap.state.players.find((p) => p.id === snap.activeSeat)?.name ?? "?";
+  const mine = snap.activeSeat === mySeatId ? "Your turn" : `Waiting on ${who}`;
+  if (clockDeadline === null) {
+    pill.textContent = mine;
+    pill.classList.remove("urgent");
+    return;
+  }
+  const remain = Math.max(0, Math.round((clockDeadline - Date.now()) / 1000));
+  pill.textContent = `${mine} — ${remain}s`;
+  pill.classList.toggle("urgent", remain <= 10);
+}
+
+setInterval(() => {
+  if (snapshot && !snapshot.ended && clockDeadline !== null) {
+    renderTurnPill();
+  }
+}, 1000);
+
+function renderPlayers(s: GameState): void {
+  const wrap = $("players");
+  wrap.innerHTML = "";
+  for (const p of s.players) {
+    const row = document.createElement("div");
+    row.className = "prow";
+    if (snapshot?.activeSeat === p.id) row.classList.add("turn-highlight");
+    const name = document.createElement("span");
+    name.className = "pname";
+    name.textContent = `${p.name}${p.id === mySeatId ? " (you)" : ""}`;
+    row.append(name);
+    const money = document.createElement("span");
+    money.className = "money";
+    money.textContent = `$${p.cash}`;
+    row.append(money);
+    const meta = document.createElement("span");
+    meta.className = "pmeta";
+    meta.textContent = `${p.theaters.length} thtr · lit ${p.litLastNight}`;
+    row.append(meta);
+    wrap.append(row);
+    for (const owned of p.properties) {
+      const def = propertyDef(R, owned.propertyId);
+      const line = document.createElement("div");
+      line.className = "prop";
+      line.textContent = `${def.name} · out ${def.output}, ${def.talentType} — contracted: ${Object.entries(owned.contracted).map(([t, n]) => `${t}: ${n}`).join(", ") || "none"}`;
+      wrap.append(line);
+    }
+  }
+}
+
+function renderMarket(s: GameState): void {
+  const wrap = $("market");
+  wrap.innerHTML = "";
+  const row = (slot: { propertyId: string }, future: boolean): HTMLElement => {
+    const def = propertyDef(R, slot.propertyId);
+    const el = document.createElement("div");
+    el.className = `mrow${future ? " future" : ""}`;
+    el.innerHTML = `<span class="mname">${def.name}</span><span class="mprice">bid ${def.faceValue}</span><span class="mmeta">out ${def.output} · ${def.talentType}</span>`;
+    return el;
+  };
+  for (const slot of s.market.current) wrap.append(row(slot, false));
+  for (const slot of s.market.future) wrap.append(row(slot, true));
+}
+
+function renderTalent(s: GameState): void {
+  const wrap = $("talent");
+  wrap.innerHTML = "";
+  for (const track of Object.keys(s.talent) as TalentTrackId[]) {
+    const def = R.talentTracks[track];
+    const st = s.talent[track];
+    const el = document.createElement("div");
+    el.className = "trow";
+    el.innerHTML = `<b>${def.name}</b> ${def.slots.map((sd, i) => `price ${sd.price}: ${st.slots[i]}`).join(" · ")}`;
+    wrap.append(el);
+  }
+}
+
+/** Turn-order strip: active, next, and "you" marked from the live snapshot order. */
+function renderTurnOrder(s: GameState): void {
+  const wrap = $("turn-order");
+  wrap.innerHTML = "";
+  const active = snapshot?.activeSeat ?? null;
+  for (let i = 0; i < s.turnOrder.length; i++) {
+    const id = s.turnOrder[i];
+    const p = playerById(s, id);
+    const chip = document.createElement("span");
+    chip.className = "tchip";
+    if (active === id) chip.classList.add("active");
+    if (active !== null && i === (s.turnOrder.indexOf(active) + 1) % s.turnOrder.length) {
+      chip.classList.add("next");
+    }
+    if (id === mySeatId) chip.classList.add("me");
+    chip.textContent = p.name;
+    wrap.append(chip);
+    if (i < s.turnOrder.length - 1) {
+      const sep = document.createElement("span");
+      sep.className = "tsep";
+      sep.textContent = "▸";
+      wrap.append(sep);
+    }
+  }
+}
+
+/** Player color for a seat index (matches the CSS p0..p3 slot classes). */
+function playerColor(state: GameState, ownerId: string): string {
+  const colors = ["#c0392b", "#27ae60", "#2980b9", "#8e44ad"];
+  const idx = state.players.findIndex((p) => p.id === ownerId);
+  return colors[Math.max(0, idx % colors.length)];
+}
+
+function svgEl<K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap[K] {
+  return document.createElementNS(NS, tag);
+}
+
+function portPoint(point: { x: number; y: number }, toward: { x: number; y: number }, amount = 10): { x: number; y: number } {
+  const dx = toward.x - point.x;
+  const dy = toward.y - point.y;
+  const length = Math.max(1, Math.hypot(dx, dy));
+  return { x: point.x + (dx / length) * amount, y: point.y + (dy / length) * amount };
+}
+
+function svgPath(points: { x: number; y: number }[], curved: boolean): string {
+  if (points.length < 2) return "";
+  const route = [
+    portPoint(points[0], points[1]),
+    ...points.slice(1, -1),
+    portPoint(points[points.length - 1], points[points.length - 2]),
+  ];
+  if (!curved || route.length < 3) {
+    return route.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  }
+  if (route.length === 3) {
+    return `M ${route[0].x} ${route[0].y} Q ${route[1].x} ${route[1].y} ${route[2].x} ${route[2].y}`;
+  }
+  let path = `M ${route[0].x} ${route[0].y}`;
+  for (let i = 1; i < route.length - 1; i++) {
+    const corner = route[i];
+    const next = route[i + 1];
+    const midpoint = { x: (corner.x + next.x) / 2, y: (corner.y + next.y) / 2 };
+    path += ` Q ${corner.x} ${corner.y} ${midpoint.x} ${midpoint.y}`;
+  }
+  const end = route[route.length - 1];
+  path += ` L ${end.x} ${end.y}`;
+  return path;
+}
+
+function cityDef(rules: GameRules, cityId: string) {
+  return rules.map.cities.find((city) => city.id === cityId)!;
+}
+
+function regionOf(rules: GameRules, cityId: string): string {
+  return cityDef(rules, cityId).region;
+}
+
+/*
+ * The exhibition board uses regional network islands. Local links stay in
+ * their region panel; cross-region links are listed separately so no line
+ * can cross an unrelated region.
+ 
+function renderMap(s: GameState): void {
+  const wrap = $("map");
+  wrap.innerHTML = "";
+  const me = mySeatId ? playerById(s, mySeatId) : null;
+  const myTurn = snapshot !== null && snapshot.activeSeat === mySeatId && s.phase === "exhibition";
+  const buildable = new Set<string>();
+  if (myTurn) {
+    for (const action of snapshot!.actions) {
+      if (action.command.type === "build" && action.command.cityId !== undefined) {
+        buildable.add(action.command.cityId);
+      }
+    }
+  }
+  const routes = me && me.theaters.length > 0 ? pathCosts(R, me) : null;
+  const activeRegions = new Set(R.map.regions.filter((r) => r.minPlayers <= s.players.length).map((r) => r.id));
+  const regionName = new Map(R.map.regions.map((r) => [r.id, r.name]));
+  const cityName = new Map(R.map.cities.map((c) => [c.id, c.name]));
+  const cityRegion = new Map(R.map.cities.map((c) => [c.id, c.region]));
+
+  const cityCard = (def: (typeof R.map.cities)[number]): HTMLElement => {
+    const city = s.cities[def.id];
+    const inPlay = city !== undefined;
+    const occupied = city?.owners.filter((owner) => owner !== null).length ?? 0;
+    const owned = mySeatId !== null && (city?.owners.includes(mySeatId) ?? false);
+    const full = inPlay && occupied >= slotsForEra(s.era);
+    const tier = inPlay ? slotCost(s, def.id) : 10;
+    const canBuild = inPlay && buildable.has(def.id);
+    const route = routes?.get(def.id);
+    const reachable = me !== null && me.theaters.length > 0 && route !== undefined && route !== Infinity;
+    const card = document.createElement("div");
+    card.className = "city-card";
+    if (!inPlay) card.classList.add("inactive");
+    if (owned) card.classList.add("mine");
+    if (me && me.theaters.length > 0 && !owned && !full && !reachable) card.classList.add("unreachable");
+    if (canBuild) card.classList.add("buildable");
+
+    const head = document.createElement("div");
+    head.className = "city-head";
+    const name = document.createElement("b");
+    name.textContent = def.name;
+    head.append(name);
+    if (canBuild && me) {
+      const badge = document.createElement("span");
+      badge.className = "build-badge";
+      badge.textContent = `$${buildCost(s, R, mySeatId!, def.id) ?? tier}`;
+      head.append(badge);
+    }
+    card.append(head);
+
+    const slots = document.createElement("div");
+    slots.className = "city-slots";
+    for (let i = 0; i < def.slots; i++) {
+      const slot = document.createElement("span");
+      slot.className = "city-slot";
+      const owner = city?.owners[i];
+      if (owner) {
+        slot.classList.add("occupied");
+        slot.style.background = playerColor(s, owner);
+      }
+      if (i >= slotsForEra(s.era)) slot.classList.add("locked");
+      slots.append(slot);
+    }
+    card.append(slots);
+
+    const meta = document.createElement("div");
+    meta.className = "city-meta";
+    if (owned) meta.textContent = "yours";
+    else if (full) meta.textContent = "full";
+    else if (reachable) meta.textContent = `route ${route}+${tier}`;
+    else if (!inPlay) meta.textContent = "not in this game";
+    card.append(meta);
+
+    if (canBuild) {
+      card.onclick = () => {
+        if (!snapshot) return;
+        send({ type: "command", command: { type: "build", cityId: def.id, stateVersion: snapshot.state.version } });
+      };
+    }
+    return card;
+  };
+
+  const board = document.createElement("div");
+  board.className = "region-board";
+  for (const region of R.map.regions) {
+    const panel = document.createElement("section");
+    panel.className = "region-panel";
+    const inPlay = activeRegions.has(region.id);
+    if (!inPlay) panel.classList.add("inactive");
+    const header = document.createElement("div");
+    header.className = "region-head";
+    const title = document.createElement("b");
+    title.textContent = region.name;
+    const status = document.createElement("span");
+    status.textContent = inPlay ? "in play" : `opens at ${region.minPlayers} players`;
+    header.append(title, status);
+    panel.append(header);
+
+    const route = document.createElement("div");
+    route.className = "region-route";
+    const cities = R.map.cities.filter((city) => city.region === region.id);
+    for (let i = 0; i < cities.length; i++) {
+      route.append(cityCard(cities[i]));
+      if (i < cities.length - 1) {
+        const link = R.map.edges.find((edge) =>
+          (edge.from === cities[i].id && edge.to === cities[i + 1].id) ||
+          (edge.to === cities[i].id && edge.from === cities[i + 1].id),
+        );
+        if (link) {
+          const cost = document.createElement("span");
+          cost.className = "local-link";
+          cost.textContent = String(link.cost);
+          route.append(cost);
+        }
+      }
+    }
+    panel.append(route);
+    board.append(panel);
+  }
+  wrap.append(board);
+
+  const bridges = document.createElement("section");
+  bridges.className = "bridges";
+  const bridgeTitle = document.createElement("b");
+  bridgeTitle.textContent = "Inter-regional connections";
+  bridges.append(bridgeTitle);
+  const bridgeGrid = document.createElement("div");
+  bridgeGrid.className = "bridge-grid";
+  for (const edge of R.map.edges) {
+    const fromRegion = cityRegion.get(edge.from)!;
+    const toRegion = cityRegion.get(edge.to)!;
+    if (fromRegion === toRegion) continue;
+    const row = document.createElement("div");
+    row.className = "bridge-row";
+    if (!activeRegions.has(fromRegion) || !activeRegions.has(toRegion)) row.classList.add("inactive");
+    const from = document.createElement("span");
+    from.className = "bridge-end";
+    from.innerHTML = `<b>${cityName.get(edge.from)}</b><small>${regionName.get(fromRegion)}</small>`;
+    const cost = document.createElement("span");
+    cost.className = "bridge-cost";
+    cost.textContent = String(edge.cost);
+    const to = document.createElement("span");
+    to.className = "bridge-end";
+    to.innerHTML = `<b>${cityName.get(edge.to)}</b><small>${regionName.get(toRegion)}</small>`;
+    row.append(from, cost, to);
+    bridgeGrid.append(row);
+  }
+  bridges.append(bridgeGrid);
+  wrap.append(bridges);
+} */
+
+function renderMap(s: GameState): void {
+  const wrap = $("map");
+  wrap.innerHTML = "";
+  assertLayoutComplete(R);
+
+  const svg = svgEl("svg");
+  svg.classList.add("map");
+  svg.setAttribute("viewBox", `${VIEWBOX.x} ${VIEWBOX.y} ${VIEWBOX.width} ${VIEWBOX.height}`);
+
+  const me = mySeatId ? playerById(s, mySeatId) : null;
+  const myTurn =
+    snapshot !== null && mySeatId !== null && snapshot.activeSeat === mySeatId && s.phase === "exhibition";
+  const buildable = new Set<string>();
+  if (myTurn) {
+    for (const a of snapshot!.actions) {
+      if (a.command.type === "build" && a.command.cityId !== undefined) buildable.add(a.command.cityId);
+    }
+  }
+  const routes = me && me.theaters.length > 0 ? pathCosts(R, me) : null;
+  const activeRegion = new Set(
+    R.map.regions.filter((r) => r.minPlayers <= s.players.length).map((r) => r.id),
+  );
+
+  // Region territories.
+  for (const reg of R.map.regions) {
+    const poly = REGION_POLYGON[reg.id];
+    const anchor = REGION_ANCHOR[reg.id];
+    if (!poly || !anchor) continue;
+    const inPlay = activeRegion.has(reg.id);
+    const shape = svgEl("polygon");
+    shape.setAttribute("points", poly.map((p) => `${p.x},${p.y}`).join(" "));
+    shape.classList.add("region", inPlay ? "in" : "out");
+    svg.append(shape);
+    const label = svgEl("text");
+    label.setAttribute("x", String(anchor.x));
+    label.setAttribute("y", String(anchor.y));
+    label.classList.add("region-label", inPlay ? "in" : "out");
+    label.textContent = inPlay ? reg.name : `${reg.name} — opens at ${reg.minPlayers} players`;
+    svg.append(label);
+  }
+
+  // Edge layer: lines labeled with their cost at the midpoint.
+  for (const e of R.map.edges) {
+    const a = CITY_POS[e.from];
+    const b = CITY_POS[e.to];
+    if (!a || !b) continue;
+    const inPlay =
+      activeRegion.has(regionOf(R, e.from)) && activeRegion.has(regionOf(R, e.to));
+    const cross = regionOf(R, e.from) !== regionOf(R, e.to);
+    const route = EDGE_ROUTES[`${e.from}:${e.to}`] ?? [a, b];
+    const path = svgEl("path");
+    path.setAttribute("d", svgPath(route, cross || route.length > 2));
+    path.classList.add("edge", inPlay ? "in" : "out", cross ? "cross" : "local");
+    svg.append(path);
+    const labelAnchor = EDGE_LABELS[`${e.from}:${e.to}`] ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const label = svgEl("text");
+    label.setAttribute("x", String(labelAnchor.x));
+    label.setAttribute("y", String(labelAnchor.y - 3));
+    label.classList.add("edge-label", inPlay ? "in" : "out", cross ? "cross" : "local");
+    label.textContent = String(e.cost);
+    svg.append(label);
+  }
+
+  // City nodes. Inactive regions remain visible so the layout never changes
+  // when a different player count is selected.
+  for (const def of R.map.cities) {
+    const cityId = def.id;
+    const pos = CITY_POS[cityId];
+    if (!pos) continue;
+    const city = s.cities[cityId];
+    const inPlay = city !== undefined;
+    const occupied = city?.owners.filter((o) => o !== null).length ?? 0;
+    const owned = mySeatId !== null && (city?.owners.includes(mySeatId) ?? false);
+    const full = inPlay && occupied >= slotsForEra(s.era);
+    const tier = inPlay ? slotCost(s, cityId) : 10;
+    const canBuild = inPlay && buildable.has(cityId);
+
+    // Route info: show the conn+slot breakdown only when it's meaningful —
+    // when I have a network and the city is reachable. "yours"/"full" for
+    // those states. Empty otherwise (the legend covers the flat $10 first
+    // build and the slot-tier tiers).
+    let routeInfo = "";
+    if (owned) {
+      routeInfo = "yours";
+    } else if (full) {
+      routeInfo = "full";
+    } else if (inPlay && routes) {
+      const edge = routes.get(cityId);
+      if (edge !== undefined && edge !== Infinity) routeInfo = `${edge}+${tier}`;
+    }
+
+    const g = svgEl("g");
+    g.classList.add("city");
+    if (!inPlay) g.classList.add("inactive");
+    if (owned) g.classList.add("mine");
+    const unreachable = me !== null && me.theaters.length > 0 && !owned && !full && routeInfo === "";
+    if (unreachable) g.classList.add("dim");
+    if (canBuild) g.classList.add("buildable");
+
+    // Ownership ring.
+    if (owned) {
+      const ring = svgEl("circle");
+      ring.setAttribute("cx", String(pos.x));
+      ring.setAttribute("cy", String(pos.y));
+      ring.setAttribute("r", "12.5");
+      ring.classList.add("ring");
+      const owner = city!.owners.find((o) => o !== null)!;
+      ring.style.stroke = playerColor(s, owner);
+      g.append(ring);
+    }
+
+    const node = svgEl("circle");
+    node.setAttribute("cx", String(pos.x));
+    node.setAttribute("cy", String(pos.y));
+    node.setAttribute("r", "9");
+    node.classList.add("node");
+    g.append(node);
+
+    // Slot dots: occupied (owner color), empty ring, era-locked (dimmed dashed ring).
+    const dotY = pos.y + 14;
+    for (let i = 0; i < def.slots; i++) {
+      const dx = pos.x + (i - (def.slots - 1) / 2) * 13;
+      const owner = city?.owners[i];
+      const locked = i >= slotsForEra(s.era);
+      const dot = svgEl("circle");
+      dot.setAttribute("cx", String(dx));
+      dot.setAttribute("cy", String(dotY));
+      dot.setAttribute("r", "3.2");
+      dot.classList.add("slotdot");
+      if (owner) {
+        dot.classList.add("occupied");
+        dot.style.fill = playerColor(s, owner);
+      } else {
+        dot.classList.add("empty");
+      }
+      if (locked) dot.classList.add("locked");
+      g.append(dot);
+    }
+
+    const name = svgEl("text");
+    name.setAttribute("x", String(pos.x));
+    name.setAttribute("y", String(pos.y + 27));
+    name.classList.add("city-name");
+    name.textContent = def.name;
+    g.append(name);
+
+    const info = svgEl("text");
+    info.setAttribute("x", String(pos.x));
+    info.setAttribute("y", String(pos.y + 38));
+    info.classList.add("city-info");
+    info.textContent = routeInfo;
+    g.append(info);
+
+    // Build badge: total cost pill above the node, only when this city is buildable now.
+    if (canBuild && me) {
+      const cost = buildCost(s, R, mySeatId!, cityId);
+      const badge = svgEl("g");
+      badge.classList.add("badge");
+      const rect = svgEl("rect");
+      const text = String(cost ?? tier);
+      const w = 10 + text.length * 6.4;
+      rect.setAttribute("x", String(pos.x - w / 2));
+      rect.setAttribute("y", String(pos.y - 24));
+      rect.setAttribute("width", String(w));
+      rect.setAttribute("height", "15");
+      rect.setAttribute("rx", "7.5");
+      const bt = svgEl("text");
+      bt.setAttribute("x", String(pos.x));
+      bt.setAttribute("y", String(pos.y - 13));
+      bt.textContent = text;
+      badge.append(rect, bt);
+      g.append(badge);
+    }
+
+    // Click-to-build: whole node group, only for currently buildable cities.
+    if (canBuild) {
+      g.classList.add("clickable");
+      g.addEventListener("click", () => {
+        if (!snapshot) return;
+        send({
+          type: "command",
+          command: { type: "build", cityId, stateVersion: snapshot.state.version },
+        });
+      });
+    }
+
+    svg.append(g);
+  }
+
+  wrap.append(svg);
+}
+
+function renderLog(s: GameState): void {
+  const logEl = $("log");
+  if (logEl.dataset.version === String(s.version)) return;
+  logEl.dataset.version = String(s.version);
+  logEl.innerHTML = "";
+  for (const line of s.log.slice(-60)) {
+    const div = document.createElement("div");
+    div.textContent = line;
+    logEl.append(div);
+  }
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function renderActions(): void {
+  const wrap = $("actions");
+  wrap.innerHTML = "";
+  if (!snapshot) return;
+  if (snapshot.ended) {
+    const div = document.createElement("div");
+    div.textContent = "Game over.";
+    wrap.append(div);
+    return;
+  }
+  if (snapshot.activeSeat !== mySeatId) {
+    const div = document.createElement("div");
+    div.textContent = "Waiting for the active studio…";
+    wrap.append(div);
+    return;
+  }
+  for (const action of snapshot.actions) {
+    const btn = document.createElement("button");
+    btn.textContent = action.label;
+    btn.onclick = () => {
+      send({ type: "command", command: action.command });
+      btn.disabled = true;
+    };
+    wrap.append(btn);
+  }
+  if (snapshot.actions.length === 0) {
+    const div = document.createElement("div");
+    div.textContent = "No legal actions.";
+    wrap.append(div);
+  }
+}
+
+// --- join/lobby wiring ---
+$("btn-create").onclick = () => {
+  nickname = ($("nickname") as HTMLInputElement).value.trim() || "Producer";
+  storage.nickname = nickname;
+  send({ type: "create-room", nickname });
+};
+$("btn-join").onclick = () => {
+  nickname = ($("nickname") as HTMLInputElement).value.trim() || "Producer";
+  storage.nickname = nickname;
+  const code = ($("code") as HTMLInputElement).value.trim().toUpperCase();
+  storage.code = code;
+  send({ type: "join-room", code, nickname });
+};
+$("btn-add-bot").onclick = () => send({ type: "add-bot" });
+$("btn-start").onclick = () => send({ type: "start-game" });
+
+// Auto-rejoin on load when we have a stored room.
+if (storage.nickname) ($("nickname") as HTMLInputElement).value = storage.nickname;
+if (storage.code) ($("code") as HTMLInputElement).value = storage.code;
+if (storage.nickname && storage.code) {
+  nickname = storage.nickname;
+  connect();
+} else {
+  showView("join");
+}
+
+// Live connection (no stored room yet): connect but wait for user action.
+if (!ws) {
+  connect();
+}

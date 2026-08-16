@@ -1,0 +1,383 @@
+{
+  "regions": [
+    {
+      "id": "coast-north",
+      "name": "North Coast",
+      "minPlayers": 2
+    },
+    {
+      "id": "coast-south",
+      "name": "Emerald Coast",
+      "minPlayers": 2
+    },
+    {
+      "id": "coast-west",
+      "name": "Sunset Coast",
+      "minPlayers": 2
+    },
+    {
+      "id": "heartland-east",
+      "name": "Veridian Heartland",
+      "minPlayers": 3
+    },
+    {
+      "id": "heartland-central",
+      "name": "Central Heartland",
+      "minPlayers": 3
+    },
+    {
+      "id": "heartland-west",
+      "name": "Silverado Heartland",
+      "minPlayers": 4
+    }
+  ],
+  "cities": [
+    {
+      "id": "cn1",
+      "name": "Bay Harbor",
+      "slots": 3,
+      "region": "coast-north"
+    },
+    {
+      "id": "cn2",
+      "name": "Halcyon",
+      "slots": 2,
+      "region": "coast-north"
+    },
+    {
+      "id": "cn3",
+      "name": "Port Meridian",
+      "slots": 3,
+      "region": "coast-north"
+    },
+    {
+      "id": "cn4",
+      "name": "Santa Verona",
+      "slots": 2,
+      "region": "coast-north"
+    },
+    {
+      "id": "cn5",
+      "name": "Northgate",
+      "slots": 2,
+      "region": "coast-north"
+    },
+    {
+      "id": "cs1",
+      "name": "Emerald Bay",
+      "slots": 3,
+      "region": "coast-south"
+    },
+    {
+      "id": "cs2",
+      "name": "Solano",
+      "slots": 2,
+      "region": "coast-south"
+    },
+    {
+      "id": "cs3",
+      "name": "Cape Aurore",
+      "slots": 3,
+      "region": "coast-south"
+    },
+    {
+      "id": "cs4",
+      "name": "Las Puntas",
+      "slots": 2,
+      "region": "coast-south"
+    },
+    {
+      "id": "cs5",
+      "name": "Marina del Oro",
+      "slots": 2,
+      "region": "coast-south"
+    },
+    {
+      "id": "cw1",
+      "name": "Paloma Beach",
+      "slots": 3,
+      "region": "coast-west"
+    },
+    {
+      "id": "cw2",
+      "name": "Sunset Pier",
+      "slots": 2,
+      "region": "coast-west"
+    },
+    {
+      "id": "cw3",
+      "name": "Corona Bay",
+      "slots": 3,
+      "region": "coast-west"
+    },
+    {
+      "id": "cw4",
+      "name": "Mal Pais",
+      "slots": 2,
+      "region": "coast-west"
+    },
+    {
+      "id": "cw5",
+      "name": "Whisper Key",
+      "slots": 2,
+      "region": "coast-west"
+    },
+    {
+      "id": "he1",
+      "name": "Cedar Falls",
+      "slots": 2,
+      "region": "heartland-east"
+    },
+    {
+      "id": "he2",
+      "name": "Fairview",
+      "slots": 3,
+      "region": "heartland-east"
+    },
+    {
+      "id": "he3",
+      "name": "Millbrook",
+      "slots": 2,
+      "region": "heartland-east"
+    },
+    {
+      "id": "he4",
+      "name": "Veridian",
+      "slots": 3,
+      "region": "heartland-east"
+    },
+    {
+      "id": "he5",
+      "name": "Elmwood",
+      "slots": 2,
+      "region": "heartland-east"
+    },
+    {
+      "id": "hc1",
+      "name": "Barlow",
+      "slots": 3,
+      "region": "heartland-central"
+    },
+    {
+      "id": "hc2",
+      "name": "Prairie Hill",
+      "slots": 2,
+      "region": "heartland-central"
+    },
+    {
+      "id": "hc3",
+      "name": "Goldfield",
+      "slots": 3,
+      "region": "heartland-central"
+    },
+    {
+      "id": "hc4",
+      "name": "Redwater",
+      "slots": 2,
+      "region": "heartland-central"
+    },
+    {
+      "id": "hc5",
+      "name": "Sutter Ridge",
+      "slots": 2,
+      "region": "heartland-central"
+    },
+    {
+      "id": "hw1",
+      "name": "Silverado",
+      "slots": 3,
+      "region": "heartland-west"
+    },
+    {
+      "id": "hw2",
+      "name": "Lone Pine",
+      "slots": 2,
+      "region": "heartland-west"
+    },
+    {
+      "id": "hw3",
+      "name": "Calverton",
+      "slots": 3,
+      "region": "heartland-west"
+    },
+    {
+      "id": "hw4",
+      "name": "Dust Springs",
+      "slots": 2,
+      "region": "heartland-west"
+    },
+    {
+      "id": "hw5",
+      "name": "Argonne",
+      "slots": 2,
+      "region": "heartland-west"
+    }
+  ],
+  "edges": [
+    {
+      "from": "cn1",
+      "to": "cn2",
+      "cost": 2
+    },
+    {
+      "from": "cn2",
+      "to": "cn3",
+      "cost": 1
+    },
+    {
+      "from": "cn3",
+      "to": "cn4",
+      "cost": 4
+    },
+    {
+      "from": "cn4",
+      "to": "cn5",
+      "cost": 3
+    },
+    {
+      "from": "cs1",
+      "to": "cs2",
+      "cost": 3
+    },
+    {
+      "from": "cs2",
+      "to": "cs3",
+      "cost": 2
+    },
+    {
+      "from": "cs3",
+      "to": "cs4",
+      "cost": 2
+    },
+    {
+      "from": "cs4",
+      "to": "cs5",
+      "cost": 1
+    },
+    {
+      "from": "cw1",
+      "to": "cw2",
+      "cost": 1
+    },
+    {
+      "from": "cw2",
+      "to": "cw3",
+      "cost": 3
+    },
+    {
+      "from": "cw3",
+      "to": "cw4",
+      "cost": 4
+    },
+    {
+      "from": "cw4",
+      "to": "cw5",
+      "cost": 2
+    },
+    {
+      "from": "he1",
+      "to": "he2",
+      "cost": 4
+    },
+    {
+      "from": "he2",
+      "to": "he3",
+      "cost": 2
+    },
+    {
+      "from": "he3",
+      "to": "he4",
+      "cost": 3
+    },
+    {
+      "from": "he4",
+      "to": "he5",
+      "cost": 5
+    },
+    {
+      "from": "hc1",
+      "to": "hc2",
+      "cost": 3
+    },
+    {
+      "from": "hc2",
+      "to": "hc3",
+      "cost": 2
+    },
+    {
+      "from": "hc3",
+      "to": "hc4",
+      "cost": 4
+    },
+    {
+      "from": "hc4",
+      "to": "hc5",
+      "cost": 2
+    },
+    {
+      "from": "hw1",
+      "to": "hw2",
+      "cost": 2
+    },
+    {
+      "from": "hw2",
+      "to": "hw3",
+      "cost": 3
+    },
+    {
+      "from": "hw3",
+      "to": "hw4",
+      "cost": 1
+    },
+    {
+      "from": "hw4",
+      "to": "hw5",
+      "cost": 4
+    },
+    {
+      "from": "cn4",
+      "to": "cs1",
+      "cost": 5
+    },
+    {
+      "from": "cs5",
+      "to": "cw5",
+      "cost": 4
+    },
+    {
+      "from": "cw3",
+      "to": "he2",
+      "cost": 5
+    },
+    {
+      "from": "cn1",
+      "to": "he2",
+      "cost": 6
+    },
+    {
+      "from": "he4",
+      "to": "hc1",
+      "cost": 4
+    },
+    {
+      "from": "hc5",
+      "to": "hw2",
+      "cost": 3
+    },
+    {
+      "from": "cw1",
+      "to": "hc4",
+      "cost": 7
+    },
+    {
+      "from": "cs3",
+      "to": "he3",
+      "cost": 6
+    },
+    {
+      "from": "cn5",
+      "to": "hw4",
+      "cost": 8
+    }
+  ]
+}

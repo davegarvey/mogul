@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mogul</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Georgia, "Times New Roman", serif;
+      background: #1a1612; color: #e8dcc8; margin: 0; padding: 16px;
+    }
+    body.era-silent { filter: grayscale(1); }
+    body.era-talkies { filter: sepia(0.45); }
+    header { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; margin-bottom: 12px; }
+    h1 { margin: 0; font-size: 28px; letter-spacing: 2px; color: #ffd700; }
+    .pill { background: #2b251d; border: 1px solid #4a4032; border-radius: 999px; padding: 2px 12px; font-size: 13px; }
+    #views > div { display: none; }
+    #views > div.active { display: block; }
+    .card {
+      background: #221d16; border: 1px solid #3c352a; border-radius: 8px;
+      padding: 10px 14px; margin: 8px 0;
+    }
+    button {
+      background: #463a28; color: #f0e6d2; border: 1px solid #6b5736;
+      border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 14px; margin: 2px;
+    }
+    button:hover { background: #5a4a30; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    input { background: #141008; color: #e8dcc8; border: 1px solid #4a4032; border-radius: 6px; padding: 6px 10px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+    .prop { border-left: 3px solid #6b5736; padding-left: 8px; margin: 3px 0 3px 4px; font-size: 12px; color: #c9bb9f; }
+    #game-layout { display: flex; gap: 12px; align-items: flex-start; }
+    #map-col { flex: 1 1 auto; min-width: 0; }
+    #map-col .card { margin-top: 0; }
+    #rail { width: 360px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; }
+    #rail .card { margin: 0; }
+    @media (max-width: 1024px) {
+      #game-layout { flex-wrap: wrap; }
+      #rail { width: 100%; }
+    }
+    /* --- exhibition map --- */
+    .map { width: 100%; height: auto; display: block; }
+    .region.in { fill: #2b251d; fill-opacity: 0.55; stroke: #4a4032; stroke-width: 1; stroke-dasharray: 5 5; }
+    .region.out { fill: #14100b; fill-opacity: 0.4; stroke: #3a3226; stroke-width: 1; stroke-dasharray: 5 5; }
+    .region-label { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+    .region-label.in { fill: #a89a7f; }
+    .region-label.out { fill: #5c5140; }
+    .edge { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .edge.in.local { stroke: #5a4a30; stroke-width: 1.6; }
+    .edge.in.cross { stroke: #9a7442; stroke-width: 1.8; stroke-dasharray: 8 4; opacity: 0.82; }
+    .edge.out { opacity: 0.22; }
+    .edge-label { font-size: 10px; fill: #8a7c63; text-anchor: middle; paint-order: stroke; stroke: #1a1612; stroke-width: 3px; }
+    .edge-label.in.local { fill: #9c8d72; }
+    .edge-label.in.cross { fill: #d1a15b; font-size: 10px; opacity: 0.95; }
+    .edge-label.out { opacity: 0.22; }
+    .city.dim { opacity: 0.42; }
+    .city.inactive { opacity: 0.3; }
+    .city .node { fill: #221d16; stroke: #6b5736; stroke-width: 1.5; }
+    .city .ring { fill: none; stroke-width: 2.5; opacity: 0.95; }
+    .city.clickable { cursor: pointer; }
+    .city.clickable .node { stroke: #4caf50; }
+    .city.clickable:hover .node { stroke: #7ee08a; stroke-width: 2.5; }
+    .slotdot { stroke: #6b5736; stroke-width: 1; fill: none; }
+    .slotdot.occupied { stroke: none; }
+    .slotdot.locked { opacity: 0.3; stroke-dasharray: 1.8 1.4; }
+    .city-name { font-size: 10.5px; fill: #d8ccb0; text-anchor: middle; }
+    .city-info { font-size: 8.5px; fill: #8a7c63; text-anchor: middle; }
+    .badge rect { fill: #1e5c2e; stroke: #4caf50; stroke-width: 1; }
+    .badge text { fill: #c8f7d0; font-size: 10px; font-weight: bold; text-anchor: middle; }
+    /* --- turn order strip --- */
+    #turn-order { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+    .tchip { padding: 2px 10px; border: 1px solid #4a4032; border-radius: 999px; font-size: 12px; color: #c9bb9f; }
+    .tchip.active { background: #ffd70022; border-color: #ffd700; color: #ffd700; }
+    .tchip.next { border-style: dashed; }
+    .tchip.me { outline: 1px solid #ffd700; outline-offset: 1px; }
+    .tsep { color: #6b5736; margin: 0 3px; font-size: 11px; }
+    /* --- rail rows --- */
+    .prow { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
+    .pname { font-weight: bold; flex: 1 1 auto; }
+    .pmeta { color: #a89a7f; font-size: 12px; }
+    .mrow { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; border-bottom: 1px dotted #2b251d; font-size: 12px; }
+    .mrow.future { opacity: 0.55; }
+    .mrow .mname { flex: 1 1 auto; }
+    .mrow .mprice { color: #ffd700; }
+    .mrow .mmeta { color: #a89a7f; font-size: 11px; }
+    .trow { padding: 2px 0; font-size: 12px; color: #c9bb9f; }
+    /* --- legend --- */
+    .legend { font-size: 12px; color: #c9bb9f; line-height: 1.7; }
+    .legend .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 1px solid #6b5736; margin-right: 5px; vertical-align: -1px; }
+    .legend .swatch.s0 { background: #c0392b; } .legend .swatch.s1 { background: #27ae60; }
+    .legend .swatch.s2 { background: #2980b9; } .legend .swatch.s3 { background: #8e44ad; }
+    #log { max-height: 140px; overflow-y: auto; font-size: 12px; color: #a89a7f; }
+    .actions button { display: block; width: 100%; text-align: left; }
+    #actions-wrap { position: sticky; bottom: 0; background: #1a1612f2; padding: 8px 0; }
+    .money { color: #ffd700; }
+    .turn-highlight { outline: 2px solid #ffd700; outline-offset: 2px; border-radius: 4px; }
+    #turn-pill.urgent { background: #6b1f1f; border-color: #c0392b; color: #ffd7d7; }
+    /* --- regional network board --- */
+    .region-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+    .region-panel { min-width: 0; padding: 8px; border: 1px solid #4a4032; border-radius: 8px; background: #1e1913; }
+    .region-panel.inactive { opacity: 0.42; }
+    .region-head { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; margin-bottom: 8px; color: #d8ccb0; }
+    .region-head span { color: #8a7c63; font-size: 10px; text-align: right; }
+    .region-route { display: flex; align-items: stretch; gap: 4px; min-width: 0; }
+    .city-card { min-width: 0; flex: 1 1 0; padding: 6px 4px; border: 1px solid #3c352a; border-radius: 6px; background: #191510; }
+    .city-card.buildable { cursor: pointer; border-color: #4caf50; box-shadow: 0 0 0 1px #4caf5040; }
+    .city-card.buildable:hover { background: #223a25; }
+    .city-card.inactive { background: #14110d; }
+    .city-card.unreachable { opacity: 0.48; }
+    .city-head { display: flex; justify-content: space-between; gap: 3px; align-items: start; min-height: 30px; }
+    .city-head b { font-size: 11px; line-height: 1.1; overflow-wrap: anywhere; }
+    .build-badge { flex: 0 0 auto; padding: 1px 4px; border-radius: 999px; background: #1e5c2e; color: #c8f7d0; font-size: 10px; font-weight: bold; }
+    .city-slots { display: flex; gap: 3px; margin: 5px 0 3px; }
+    .city-slot { width: 9px; height: 9px; border: 1px solid #6b5736; border-radius: 50%; }
+    .city-slot.occupied { border-color: transparent; }
+    .city-slot.locked { opacity: 0.28; border-style: dashed; }
+    .city-meta { min-height: 13px; color: #8a7c63; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .local-link { flex: 0 0 14px; align-self: center; color: #9c8d72; font-size: 10px; text-align: center; border-top: 1px solid #5a4a30; padding-top: 2px; }
+    .bridges { margin-top: 10px; padding: 9px; border: 1px solid #4a4032; border-radius: 8px; background: #1e1913; }
+    .bridge-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 7px; }
+    .bridge-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr); gap: 5px; align-items: center; padding: 5px; border: 1px solid #3c352a; border-radius: 5px; background: #191510; }
+    .bridge-row.inactive { opacity: 0.45; }
+    .bridge-end { min-width: 0; display: flex; flex-direction: column; }
+    .bridge-end b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+    .bridge-end small { color: #8a7c63; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
+    .bridge-cost { color: #ffd700; text-align: center; font-weight: bold; border-top: 1px solid #6b5736; border-bottom: 1px solid #6b5736; padding: 1px 0; }
+    @media (max-width: 1200px) {
+      .region-board, .bridge-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .region-board, .bridge-grid { grid-template-columns: 1fr; }
+      .region-route { overflow-x: auto; padding-bottom: 4px; }
+      .city-card { min-width: 112px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MOGUL</h1>
+    <span class="pill" id="era-pill"></span>
+    <span class="pill" id="phase-pill"></span>
+    <span class="pill" id="round-pill"></span>
+    <span class="pill" id="turn-pill"></span>
+  </header>
+
+  <div id="views">
+    <div id="view-join">
+      <div class="card">
+        <h3>Join the studio system</h3>
+        <div class="row">
+          <input id="nickname" placeholder="Nickname" />
+          <button id="btn-create">Create room</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input id="code" placeholder="Room code" />
+          <button id="btn-join">Join room</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-lobby">
+      <div class="card">
+        <div class="row">
+          <h3 style="margin:0">Room <span id="room-code"></span></h3>
+          <span class="pill" id="lobby-status"></span>
+        </div>
+        <div id="roster"></div>
+        <div id="room-config" style="font-size: 13px; color: #a89a7f; margin-top: 8px"></div>
+        <div class="row" style="margin-top:10px">
+          <button id="btn-add-bot">Add bot</button>
+          <button id="btn-start">Start game</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-game">
+      <div id="game-layout">
+        <div id="map-col">
+          <div class="card">
+            <b>Exhibition map</b>
+            <div id="map"></div>
+          </div>
+        </div>
+        <div id="rail">
+          <div class="card">
+            <b>Turn order</b>
+            <div id="turn-order"></div>
+          </div>
+          <div class="card">
+            <b>Studios</b>
+            <div id="players"></div>
+          </div>
+          <div class="card">
+            <b>Rights market</b>
+            <div id="market"></div>
+          </div>
+          <div class="card">
+            <b>Talent market</b>
+            <div id="talent"></div>
+          </div>
+          <div class="card">
+            <b>Legend</b>
+            <div class="legend">
+              Theater slots: 1st <b>10$</b> · 2nd <b>15$</b> · 3rd <b>20$</b><br />
+              Era unlocks: silent <b>1</b> · talkies <b>2</b> · golden <b>3</b> slots per city<br />
+              Locked slots shown dimmed with a lock.<br />
+              Studios:
+              <span class="swatch s0"></span><span class="swatch s1"></span><span class="swatch s2"></span><span class="swatch s3"></span><br />
+              Green badge: build now · ring: your theater · dimmed: no route
+            </div>
+          </div>
+          <div class="card" id="log-card">
+            <b>Studio log</b>
+            <div id="log"></div>
+          </div>
+        </div>
+      </div>
+      <div id="actions-wrap" class="card"><div id="actions"></div></div>
+    </div>
+  </div>
+
+  <script src="/client.js"></script>
+</body>
+</html>

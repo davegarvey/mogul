@@ -1,0 +1,46 @@
+{
+  "extras": {
+    "id": "extras",
+    "name": "Extras",
+    "slots": [
+      { "price": 1, "max": 3 },
+      { "price": 2, "max": 3 },
+      { "price": 3, "max": 3 },
+      { "price": 4, "max": 3 }
+    ],
+    "restock": { "silent": 3, "talkies": 4, "golden": 5 }
+  },
+  "character-actors": {
+    "id": "character-actors",
+    "name": "Character Actors",
+    "slots": [
+      { "price": 3, "max": 3 },
+      { "price": 4, "max": 3 },
+      { "price": 5, "max": 3 },
+      { "price": 6, "max": 3 }
+    ],
+    "restock": { "silent": 3, "talkies": 4, "golden": 5 }
+  },
+  "stars": {
+    "id": "stars",
+    "name": "Stars",
+    "slots": [
+      { "price": 8, "max": 2 },
+      { "price": 10, "max": 2 },
+      { "price": 12, "max": 2 },
+      { "price": 14, "max": 2 }
+    ],
+    "restock": { "silent": 2, "talkies": 3, "golden": 4 }
+  },
+  "a-listers": {
+    "id": "a-listers",
+    "name": "A-Listers",
+    "slots": [
+      { "price": 14, "max": 1 },
+      { "price": 16, "max": 1 },
+      { "price": 18, "max": 1 },
+      { "price": 20, "max": 1 }
+    ],
+    "restock": { "silent": 1, "talkies": 2, "golden": 3 }
+  }
+}

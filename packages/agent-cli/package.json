@@ -1,0 +1,18 @@
+{
+  "name": "@mogul/agent-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "bin": {
+    "mogul-agent": "src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mogul/engine": "*",
+    "@mogul/protocol": "*"
+  }
+}

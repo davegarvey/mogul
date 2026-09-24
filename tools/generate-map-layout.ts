@@ -5,10 +5,13 @@
  *  - region arrangement (single ring; cyclic order + per-region chain orientation
  *    chosen by exhaustive search to minimize inter-region crossings)
  *  - city positions (label-width-aware spacing on local arcs facing the center)
- *  - gateway cities (cities with cross-region edges) pulled inward toward their targets
+ *  - territories: the convex hull of each region's rendered city UI and local-edge labels,
+ *    offset by a small margin (no empty space beyond the content)
+ *  - ring radius: the smallest that keeps neighbouring territories apart and leaves an
+ *    inner corridor for the cross-region routes (solved by bisection)
  *  - cross-region routes (polar curves that dive below the ring inside the source span,
  *    so they never traverse an unrelated territory)
- *  - label anchors, viewBox, and a self-verification report
+ *  - label anchors, a viewBox fitted to the drawn content, and a self-verification report
  *
  * No hand-placed coordinates exist anywhere in the pipeline. If the map data changes,
  * this tool regenerates a valid layout or fails loudly with a precise message.
@@ -17,11 +20,13 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { DEFAULT_RULES } from "@mogul/engine";
+import { centroid, convexHull, offsetConvex, pointInPolygon, pointPolygonDistance, polygonArea, polygonDistance } from "./geometry.js";
 
 // ============ types ============
-interface Pt { x: number; y: number }
+type Pt = { x: number; y: number };
+type Box = [number, number, number, number];
 interface CityDef { id: string; name: string; slots: number; region: string }
-interface RegionDef { id: string; name: string }
+interface RegionDef { id: string; name: string; minPlayers: number }
 interface EdgeDef { from: string; to: string; cost: number }
 
 const R = DEFAULT_RULES;
@@ -37,12 +42,15 @@ const nameW = (name: string) => name.length * NAME_PX_PER_CHAR;
 let PAD = 10; // min clearance between adjacent city label boxes (grows on auto-fit)
 const INFO_PX_PER_CHAR = 4.7; // 8.5px info microtext
 const INFO_MAX_W = "route 10+15".length * INFO_PX_PER_CHAR;
-const ARC_BETA_DEG = 100; // city arc angular span (region-local)
-const TERRITORY_MARGIN = 40; // territory radius beyond the city arc
-const RING_GAP = 28; // between neighboring territories on the ring
-const EXIT_BELOW_RING = 20; // how far below the ring band curves dive
+const ARC_BETA_DEG = 140; // city arc angular span (region-local); tighter arcs pack regions smaller
+const TERRITORY_MARGIN = 16; // territory outline beyond the region's rendered content
+const CLIP_TOLERANCE = 6; // routes may graze this far into a territory edge
+let RING_GAP = 24; // min distance between neighbouring territories (grows on auto-fit)
+let MIN_CORRIDOR = 90; // min radius of the empty inner disk for cross routes (grows on auto-fit)
+const EXIT_BELOW_RING = 20; // how far below the innermost territory the cross routes run
+const CANVAS_MARGIN = 20; // viewBox margin beyond the outermost drawn element
+const REGION_LABEL_GAP = 16; // region label distance beyond its territory
 const BOW = 14; // local-edge bow (outward from the region center)
-const GATEWAY_PULL = 40; // how far gateway cities are pulled inward
 const NAME_BELOW = 27; // city name baseline below the node center
 const NODE_R = 9;
 
@@ -103,10 +111,13 @@ interface LayoutConfig {
 interface Layout extends LayoutConfig {
   regionAngle: Record<string, number>;
   ringRadius: number;
-  territoryR: Record<string, number>;
+  /** Territory outline per region (content hull + margin). */
+  territory: Record<string, Pt[]>;
+  regionLabel: Record<string, Pt>;
   cityPos: Record<string, Pt>;
   route: Record<string, { kind: "local" | "cross"; pts: Pt[]; label: Pt }>;
-  viewSize: number; // diameter of the layout
+  /** Fitted to the drawn content once labels are placed (see fitViewBox). */
+  viewBox: { x: number; y: number; width: number; height: number };
 }
 
 // local position of each city of a chain on the region's arc (facing the center),
@@ -137,70 +148,168 @@ function cityArc(chain: string[], orient: boolean): { byCity: Record<string, Pt>
   return { byCity, gaps };
 }
 
-function buildLayout(cfg: LayoutConfig): Layout {
+/** Edge cost label as the client draws it: 10px text centred on x, baseline 3px above the anchor. */
+function edgeLabelBox(p: Pt, cost: number): Box {
+  const lw = String(cost).length * 6 + 4;
+  return [p.x - lw / 2, p.y - 13, lw, 13];
+}
+const costOf = (key: string) => edges.find((x) => `${x.from}:${x.to}` === key)?.cost ?? 0;
+
+/** UI boxes a city node renders (mirrors the client): node, ring, name, slot dots, info, badge. */
+function uiBoxes(name: string, p: Pt): { part: string; box: Box }[] {
+  const w = nameW(name);
+  return [
+    { part: "", box: [p.x - NODE_R, p.y - NODE_R, NODE_R * 2, NODE_R * 2] },
+    { part: "ring", box: [p.x - 12.5, p.y - 12.5, 25, 25] },
+    { part: "name", box: [p.x - w / 2, p.y + NAME_BELOW - 10, w, 13] },
+    { part: "dots", box: [p.x - 17, p.y + 10.8, 34, 6.4] },
+    { part: "info", box: [p.x - INFO_MAX_W / 2, p.y + 30, INFO_MAX_W, 11] },
+    { part: "badge", box: [p.x - 20, p.y - 24, 40, 15] },
+  ];
+}
+const corners = ([x, y, w, h]: Box): Pt[] => [
+  { x, y },
+  { x: x + w, y },
+  { x: x + w, y: y + h },
+  { x, y: y + h },
+];
+
+/** Region geometry relative to its ring anchor rC: city offsets and the territory outline. */
+interface RegionShape {
+  cityRel: Record<string, Pt>;
+  territoryRel: Pt[];
+}
+const shapeCache = new Map<string, RegionShape>();
+
+function regionShape(rid: string, orient: boolean, angleDeg: number): RegionShape {
+  const key = `${rid}|${orient}|${angleDeg}|${PAD}`;
+  const hit = shapeCache.get(key);
+  if (hit) return hit;
+  const a = deg(angleDeg);
+  const inward = pol(a + Math.PI, 1);
+  const tangent = rot(inward, Math.PI / 2);
+  const { byCity } = cityArc(chains[rid], orient);
+  const cityRel: Record<string, Pt> = {};
+  for (const [cid, p] of Object.entries(byCity)) {
+    const localAng = Math.atan2(p.y, p.x); // angle along the arc from the inward direction
+    const r = Math.hypot(p.x, p.y); // arc radius
+    cityRel[cid] = add(mul(inward, Math.cos(localAng) * r), mul(tangent, Math.sin(localAng) * r));
+  }
+  // Content: every city's UI boxes plus a label box at each local edge's bow peak.
+  const pts: Pt[] = [];
+  for (const cid of chains[rid]) for (const b of uiBoxes(byId[cid].name, cityRel[cid])) pts.push(...corners(b.box));
+  for (let i = 0; i < chains[rid].length - 1; i++) {
+    const control = localControl(cityRel[chains[rid][i]], cityRel[chains[rid][i + 1]], { x: 0, y: 0 });
+    pts.push(...corners(edgeLabelBox(control, 10)));
+  }
+  const shape = { cityRel, territoryRel: offsetConvex(convexHull(pts), TERRITORY_MARGIN, 4) };
+  shapeCache.set(key, shape);
+  return shape;
+}
+
+/** Control point of a local edge: a shallow bow away from the map centre (toward the region anchor). */
+function localControl(a: Pt, b: Pt, anchor: Pt): Pt {
+  const mid = mul(add(a, b), 0.5);
+  return add(mid, mul(norm(sub(anchor, mid)), BOW));
+}
+
+const translate = (poly: Pt[], d: Pt): Pt[] => poly.map((p) => add(p, d));
+
+/**
+ * Smallest ring radius at which every pair of territories is at least RING_GAP apart and
+ * every territory stays clear of the inner corridor the cross routes use. Both conditions
+ * only get easier as the ring grows, so bisection finds the minimum.
+ */
+function solveRing(order: string[], angles: Record<string, number>, shapes: Record<string, RegionShape>): number {
+  const needInner = MIN_CORRIDOR + EXIT_BELOW_RING;
+  const ok = (R: number): boolean => {
+    const polys = order.map((rid) => translate(shapes[rid].territoryRel, pol(deg(angles[rid]), R)));
+    for (const poly of polys) if (pointPolygonDistance(C, poly) < needInner) return false;
+    for (let i = 0; i < polys.length; i++) {
+      for (let j = i + 1; j < polys.length; j++) if (polygonDistance(polys[i], polys[j]) < RING_GAP) return false;
+    }
+    return true;
+  };
+  let lo = 0;
+  let hi = 400;
+  while (!ok(hi)) hi *= 1.5;
+  for (let iter = 0; iter < 24; iter++) {
+    const mid = (lo + hi) / 2;
+    if (ok(mid)) hi = mid;
+    else lo = mid;
+  }
+  return Math.ceil(hi);
+}
+
+/**
+ * Region labels are wide and horizontal. Put each one above its territory (upper half of
+ * the ring) or below it (lower half), centred on the territory, and move it outward until
+ * it clears every territory. Fall back to the radial direction if that fails.
+ */
+function placeRegionLabel(rid: string, territory: Record<string, Pt[]>, dir: Pt, placed: Box[]): Pt {
+  const def = regions.find((r) => r.id === rid)!;
+  const poly = territory[rid];
+  const apart = (a: Box, b: Box) => a[0] + a[2] + 8 <= b[0] || b[0] + b[2] + 8 <= a[0] || a[1] + a[3] + 4 <= b[1] || b[1] + b[3] + 4 <= a[1];
+  const clear = (a: Pt) => {
+    const b = labelBoxAt(def, a);
+    const box = corners(b);
+    return placed.every((p) => apart(b, p)) && Object.values(territory).every((t) => polygonDistance(box, t) >= 4);
+  };
+  const cx = centroid(poly).x;
+  const up = dir.y < 0;
+  const edge = up ? Math.min(...poly.map((p) => p.y)) : Math.max(...poly.map((p) => p.y));
+  // baseline: above the top edge, or far enough below the bottom edge to fit the glyphs
+  for (let d = REGION_LABEL_GAP - 8; d < 200; d += 4) {
+    const a = { x: cx, y: up ? edge - d : edge + d + 11 };
+    if (clear(a)) return a;
+  }
+  const reach = Math.max(...poly.map((p) => p.x * dir.x + p.y * dir.y));
+  for (let at = reach + REGION_LABEL_GAP; at < reach + 400; at += 4) if (clear(mul(dir, at))) return mul(dir, at);
+  return mul(dir, reach + REGION_LABEL_GAP);
+}
+
+function buildLayout(cfg: LayoutConfig, fixedRing?: number): Layout {
   const { order, orientation } = cfg;
   const n = order.length;
   const regionAngle: Record<string, number> = {};
   order.forEach((rid, i) => (regionAngle[rid] = 90 + i * (360 / n)));
+  const shapes: Record<string, RegionShape> = {};
+  for (const rid of order) shapes[rid] = regionShape(rid, orientation[rid], regionAngle[rid]);
+  const ringRadius = fixedRing ?? solveRing(order, regionAngle, shapes);
 
-  const arcR: Record<string, number> = {};
-  const byCityAll: Record<string, Record<string, Pt>> = {};
-  for (const rid of order) {
-    const { byCity, gaps } = cityArc(chains[rid], false);
-    byCityAll[rid] = byCity;
-    arcR[rid] = Math.max(90, gaps.reduce((a, b) => a + b, 0) / deg(ARC_BETA_DEG));
-  }
-  const territoryR: Record<string, number> = {};
-  for (const rid of order) territoryR[rid] = arcR[rid] + TERRITORY_MARGIN;
-  const ringRadius = 2 * Math.max(...order.map((r) => territoryR[r])) + RING_GAP;
-
-  // city positions: on the arc facing the center; gateway cities pulled inward
-  // toward the mean direction of their cross-region targets.
   const cityPos: Record<string, Pt> = {};
+  const territory: Record<string, Pt[]> = {};
+  const regionLabel: Record<string, Pt> = {};
   for (const rid of order) {
-    const a = deg(regionAngle[rid]);
-    const inward = pol(a + Math.PI, 1);
-    const tangent = rot(inward, Math.PI / 2);
-    const rC = pol(a, ringRadius);
-    const { byCity } = cityArc(chains[rid], orientation[rid]);
-    for (const [cid, p] of Object.entries(byCity)) {
-      const localAng = Math.atan2(p.y, p.x); // angle along the arc from the inward direction
-      const r = Math.hypot(p.x, p.y); // arc radius
-      cityPos[cid] = add(add(rC, mul(inward, Math.cos(localAng) * r)), mul(tangent, Math.sin(localAng) * r));
+    const rC = pol(deg(regionAngle[rid]), ringRadius);
+    for (const [cid, rel] of Object.entries(shapes[rid].cityRel)) cityPos[cid] = add(rC, rel);
+    territory[rid] = translate(shapes[rid].territoryRel, rC);
+  }
+  // Labels only matter for exact layouts; provisional search candidates skip them.
+  if (fixedRing === undefined) {
+    const placed: Box[] = [];
+    for (const rid of order) {
+      regionLabel[rid] = placeRegionLabel(rid, territory, pol(deg(regionAngle[rid]), 1), placed);
+      placed.push(labelBoxAt(regions.find((r) => r.id === rid)!, regionLabel[rid]));
     }
-    void byCityAll;
   }
 
   // routes
   const route: Layout["route"] = {};
-  const pr = (rid: string) => pol(deg(regionAngle[rid]), ringRadius);
-  const exitOnRay = (from: Pt, rid: string, toward: Pt): Pt => {
-    const p = pr(rid);
-    const rt = territoryR[rid];
-    const d = norm(sub(toward, from));
-    const b = d.x * (from.x - p.x) + d.y * (from.y - p.y);
-    const disc = b * b - ((from.x - p.x) ** 2 + (from.y - p.y) ** 2 - rt * rt);
-    if (disc < 0) throw new Error(`map-layout: no exit for edge from ${from.x},${from.y} in region ${rid}`);
-    const s = -b + Math.sqrt(disc);
-    return { x: from.x + d.x * s, y: from.y + d.y * s };
-  };
-
+  const inner = Math.min(...order.map((rid) => pointPolygonDistance(C, territory[rid])));
+  const rBelow = inner - EXIT_BELOW_RING;
   for (const e of edges) {
     const key = `${e.from}:${e.to}`;
     const a = cityPos[e.from];
     const b = cityPos[e.to];
     if (regionOf(e.from) === regionOf(e.to)) {
-      // local edge: shallow outward bow between consecutive chain cities
-      const p = pr(regionOf(e.from));
-      const mid = mul(add(a, b), 0.5);
-      const control = add(mid, mul(norm(sub(p, mid)), BOW));
+      const control = localControl(a, b, pol(deg(regionAngle[regionOf(e.from)]), ringRadius));
       route[key] = { kind: "local", pts: [a, control, b], label: control };
     } else {
       // cross edge: exits on the same below-ring radius circle at each city's own angle
       // (ports stay inside the source territory's angular span, chords stay inside the
       // empty inner disk); the crossing count is exactly the chord-alternation count
       // over the exit angles, minimized by the search.
-      const rBelow = ringRadius - Math.max(...order.map((r) => territoryR[r])) - EXIT_BELOW_RING;
       const e1 = pol(angOf(a), rBelow);
       const e2 = pol(angOf(b), rBelow);
       route[key] = { kind: "cross", pts: [a, e1, e2, b], label: mul(add(e1, e2), 0.5) };
@@ -211,10 +320,11 @@ function buildLayout(cfg: LayoutConfig): Layout {
     ...cfg,
     regionAngle,
     ringRadius,
-    territoryR,
+    territory,
+    regionLabel,
     cityPos,
     route,
-    viewSize: 2 * (ringRadius + Math.max(...order.map((r) => territoryR[r])) + 70),
+    viewBox: { x: 0, y: 0, width: 0, height: 0 },
   };
 }
 
@@ -316,10 +426,9 @@ function countClips(l: Layout): { count: number; list: string[] } {
     const pts = sampleRoute(r.pts);
     for (const rid of Object.keys(l.regionAngle)) {
       if (own.has(rid)) continue;
-      const rc = pol(deg(l.regionAngle[rid]), l.ringRadius);
-      const rt = l.territoryR[rid] - 6;
+      const poly = l.territory[rid];
       for (const p of pts) {
-        if (Math.hypot(p.x - rc.x, p.y - rc.y) < rt) {
+        if (pointInPolygon(p, poly) && edgeDepth(p, poly) > CLIP_TOLERANCE) {
           out.count++;
           out.list.push(`${key} through ${rid}`);
           break;
@@ -330,21 +439,43 @@ function countClips(l: Layout): { count: number; list: string[] } {
   return out;
 }
 
+/** How far a point inside a polygon is from its nearest edge. */
+function edgeDepth(p: Pt, poly: Pt[]): number {
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+    best = Math.min(best, Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy)));
+  }
+  return best;
+}
+
 // collision boxes mirror the client's rendered UI exactly
-function cityBoxes(l: Layout): { id: string; box: [number, number, number, number] }[] {
-  const boxes: { id: string; box: [number, number, number, number] }[] = [];
+function cityBoxes(l: Layout): { id: string; box: Box }[] {
+  const boxes: { id: string; box: Box }[] = [];
   for (const c of cities) {
     const p = l.cityPos[c.id];
     if (!p) continue;
-    const w = nameW(c.name);
-    boxes.push({ id: c.name, box: [p.x - NODE_R, p.y - NODE_R, NODE_R * 2, NODE_R * 2] });
-    boxes.push({ id: `${c.name}~ring`, box: [p.x - 12.5, p.y - 12.5, 25, 25] });
-    boxes.push({ id: `${c.name}~name`, box: [p.x - w / 2, p.y + NAME_BELOW - 8, w, 11] });
-    boxes.push({ id: `${c.name}~dots`, box: [p.x - 17, p.y + 10.8, 34, 6.4] });
-    boxes.push({ id: `${c.name}~info`, box: [p.x - INFO_MAX_W / 2, p.y + 33.5, INFO_MAX_W, 9] });
-    boxes.push({ id: `${c.name}~badge`, box: [p.x - 20, p.y - 24, 40, 15] });
+    for (const b of uiBoxes(c.name, p)) boxes.push({ id: b.part ? `${c.name}~${b.part}` : c.name, box: b.box });
   }
   return boxes;
+}
+
+/**
+ * Region label box as the client renders it: uppercase, 12px, 2px letter spacing, centred on
+ * the anchor's baseline; regions not always in play carry the " — opens at N players" suffix.
+ */
+function regionLabelBox(l: Layout, r: RegionDef): Box {
+  return labelBoxAt(r, l.regionLabel[r.id]);
+}
+function labelBoxAt(r: RegionDef, a: Pt): Box {
+  const text = r.minPlayers > 2 ? `${r.name} — opens at ${r.minPlayers} players` : r.name;
+  const w = text.length * 10; // measured ≈9.2–9.9px per uppercase char with 2px tracking
+  return [a.x - w / 2, a.y - 11, w, 14];
 }
 
 // label placement: each edge cost label is nudged along/around its route until it clears
@@ -355,17 +486,8 @@ function placeLabels(l: Layout): { count: number; list: string[] } {
     id: b.id,
     box: b.box,
   }));
-  for (const r of regions) {
-    const rc = pol(deg(l.regionAngle[r.id]), l.ringRadius);
-    const a = add(rc, mul(norm(sub(rc, C)), l.territoryR[r.id] + 14));
-    // the client renders the uppercase name plus the " — opens at N players" suffix
-    const w = (r.name.length + 24) * 12 * 0.62;
-    fixed.push({ owner: `REG ${r.id}`, id: `REG ${r.name}`, box: [a.x - w / 2, a.y - 7, w, 14] });
-  }
-  const labelBox = (p: Pt, cost: number): [number, number, number, number] => {
-    const lw = String(cost).length * 6 + 4;
-    return [p.x - lw / 2, p.y - 6, lw, 12];
-  };
+  for (const r of regions) fixed.push({ owner: `REG ${r.id}`, id: `REG ${r.name}`, box: regionLabelBox(l, r) });
+  const labelBox = edgeLabelBox;
   const overlaps = (b1: [number, number, number, number], b2: [number, number, number, number]) =>
     b1[0] < b2[0] + b2[2] && b2[0] < b1[0] + b1[2] && b1[1] < b2[1] + b2[3] && b2[1] < b1[1] + b1[3];
 
@@ -427,15 +549,9 @@ function countCollisions(l: Layout): { count: number; list: string[] } {
     id: b.id,
     box: b.box,
   }));
-  for (const r of regions) {
-    const rc = pol(deg(l.regionAngle[r.id]), l.ringRadius);
-    const a = add(rc, mul(norm(sub(rc, C)), l.territoryR[r.id] + 14));
-    const w = r.name.length * 12 * 0.62;
-    boxes.push({ owner: `REG ${r.id}`, id: `REG ${r.name}`, box: [a.x - w / 2, a.y - 7, w, 14] });
-  }
+  for (const r of regions) boxes.push({ owner: `REG ${r.id}`, id: `REG ${r.name}`, box: regionLabelBox(l, r) });
   for (const [key, e] of Object.entries(l.route)) {
-    const lw = String(edges.find((x) => `${x.from}:${x.to}` === key)?.cost ?? 0).length * 6 + 4;
-    boxes.push({ owner: `label ${key}`, id: `label ${key}`, box: [e.label.x - lw / 2, e.label.y - 6, lw, 12] });
+    boxes.push({ owner: `label ${key}`, id: `label ${key}`, box: edgeLabelBox(e.label, costOf(key)) });
   }
   let count = 0;
   const list: string[] = [];
@@ -499,28 +615,40 @@ function geographyPenalty(l: Layout): number {
   return Math.abs(360 / coastAngles.length - (360 - maxGap));
 }
 
+/** Bounding box of everything the client draws, plus CANVAS_MARGIN on every side. */
+function fitViewBox(l: Layout): Layout["viewBox"] {
+  const pts: Pt[] = [];
+  for (const poly of Object.values(l.territory)) pts.push(...poly);
+  for (const r of regions) pts.push(...corners(regionLabelBox(l, r)));
+  for (const b of cityBoxes(l)) pts.push(...corners(b.box));
+  for (const [key, e] of Object.entries(l.route)) {
+    pts.push(...sampleRoute(e.pts));
+    pts.push(...corners(edgeLabelBox(e.label, costOf(key))));
+  }
+  const minX = Math.min(...pts.map((p) => p.x)) - CANVAS_MARGIN;
+  const minY = Math.min(...pts.map((p) => p.y)) - CANVAS_MARGIN;
+  const maxX = Math.max(...pts.map((p) => p.x)) + CANVAS_MARGIN;
+  const maxY = Math.max(...pts.map((p) => p.y)) + CANVAS_MARGIN;
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+  return { x: r1(minX), y: r1(minY), width: r1(maxX - minX), height: r1(maxY - minY) };
+}
+
 function verify(l: Layout) {
   const labels = placeLabels(l);
   const collisions = countCollisions(l);
   collisions.count += labels.count;
   for (const item of labels.list) collisions.list.push(item);
-  // every city and every label must sit inside the viewBox
-  const S = l.viewSize / 2;
-  const inside = (p: Pt) => Math.abs(p.x) <= S && Math.abs(p.y) <= S;
-  for (const c of cities) {
-    if (!inside(l.cityPos[c.id])) {
-      collisions.count += 1000;
-      collisions.list.push(`city ${c.id} outside viewBox`);
+  // Territories must not overlap; the ring solver guarantees it, verification proves it.
+  const rids = Object.keys(l.territory);
+  for (let i = 0; i < rids.length; i++) {
+    for (let j = i + 1; j < rids.length; j++) {
+      if (polygonDistance(l.territory[rids[i]], l.territory[rids[j]]) === 0) {
+        collisions.count += 1000;
+        collisions.list.push(`territory ${rids[i]} x ${rids[j]}`);
+      }
     }
   }
-  for (const r of regions) {
-    const rc = pol(deg(l.regionAngle[r.id]), l.ringRadius);
-    const a = add(rc, mul(norm(sub(rc, C)), l.territoryR[r.id] + 14));
-    if (!inside(a)) {
-      collisions.count += 1000;
-      collisions.list.push(`region label ${r.id} outside viewBox`);
-    }
-  }
+  l.viewBox = fitViewBox(l);
   return {
     crossings: countCrossings(l),
     clips: countClips(l),
@@ -535,6 +663,10 @@ const perms = <T,>(arr: T[]): T[][] =>
 function search(): { l: Layout; v: ReturnType<typeof verify> } {
   const orders = perms(regions.map((r) => r.id));
   console.log(`map-layout: searching ${orders.length * 64} configurations...`);
+  // Rank every configuration on a shared provisional ring (solving the ring per candidate
+  // is too slow for the full space); finalists are rebuilt on their own solved ring below.
+  const ids = regions.map((r) => r.id);
+  const provisional = buildLayout({ order: ids, orientation: Object.fromEntries(ids.map((id) => [id, false])) }).ringRadius;
   const candidates: { l: Layout; fast: number; geo: number }[] = [];
   for (const order of orders) {
     for (let oi = 0; oi < 64; oi++) {
@@ -542,7 +674,7 @@ function search(): { l: Layout; v: ReturnType<typeof verify> } {
       order.forEach((rid, i) => (orientation[rid] = !!(oi & (1 << i))));
       let l: Layout;
       try {
-        l = buildLayout({ order, orientation });
+        l = buildLayout({ order, orientation }, provisional);
       } catch {
         continue;
       }
@@ -555,8 +687,9 @@ function search(): { l: Layout; v: ReturnType<typeof verify> } {
   // verify every config at that minimum and pick the best geography among them
   const minFast = candidates[0].fast;
   let best: { l: Layout; v: ReturnType<typeof verify>; geo: number; score: number } | null = null;
-  for (const cand of candidates) {
-    if (cand.fast > minFast) break; // sorted by fast
+  for (const provisionalCand of candidates) {
+    if (provisionalCand.fast > minFast) break; // sorted by fast
+    const cand = { ...provisionalCand, l: buildLayout({ order: provisionalCand.l.order, orientation: provisionalCand.l.orientation }) };
     const v = verify(cand.l);
     const score = v.crossings.crossCross * 1000 + v.crossings.localCross * 100 + v.collisions.count + v.clips.count * 10000;
     if (!best ||
@@ -616,9 +749,13 @@ function autoFit(): { l: Layout; v: ReturnType<typeof verify>; scale: number } {
     if (iter < 5) {
       scale *= 1.12;
       PAD += 2;
+      RING_GAP += 6;
+      MIN_CORRIDOR = Math.round(MIN_CORRIDOR * 1.15);
+      shapeCache.clear();
       console.log(
         `map-layout: verification found ${v.collisions.count} collisions / ${v.clips.count} clips — ` +
-          `scaling spacing to PAD=${PAD} and re-running`,
+          `scaling spacing to PAD=${PAD}, RING_GAP=${RING_GAP}, MIN_CORRIDOR=${MIN_CORRIDOR} and re-running ` +
+          `[${[...v.collisions.list, ...v.clips.list].join("; ")}]`,
       );
     }
   }
@@ -635,19 +772,13 @@ function autoFit(): { l: Layout; v: ReturnType<typeof verify>; scale: number } {
 const output = "packages/client/src/map-layout.generated.json";
 const { l, v, scale } = autoFit();
 
+const round1 = (p: Pt): Pt => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 });
 const regionGeom: Record<string, unknown> = {};
 for (const rid of Object.keys(l.regionAngle)) {
-  const rc = pol(deg(l.regionAngle[rid]), l.ringRadius);
-  const rt = l.territoryR[rid];
-  const labelA = add(rc, mul(norm(sub(rc, C)), rt + 16));
   regionGeom[rid] = {
-    center: { x: Math.round(rc.x * 10) / 10, y: Math.round(rc.y * 10) / 10 },
-    radius: Math.round(rt * 10) / 10,
-    polygon: Array.from({ length: 16 }, (_, i) => {
-      const p = add(rc, pol((i / 16) * 2 * Math.PI, rt));
-      return { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 };
-    }),
-    label: { x: Math.round(labelA.x * 10) / 10, y: Math.round(labelA.y * 10) / 10 },
+    center: round1(centroid(l.territory[rid])),
+    polygon: l.territory[rid].map(round1),
+    label: round1(l.regionLabel[rid]),
   };
 }
 
@@ -669,10 +800,9 @@ for (const e of edges) {
   };
 }
 
-const S = l.viewSize / 2;
 const payload = {
-  version: 1,
-  viewBox: { x: -S, y: -S, width: l.viewSize, height: l.viewSize },
+  version: 2,
+  viewBox: l.viewBox,
   scale,
   regions: regionGeom,
   cities: cityGeom,
@@ -684,6 +814,8 @@ const payload = {
     regionOrder: l.order,
     orientation: l.orientation,
     geographyPenalty: geographyPenalty(l),
+    ringRadius: l.ringRadius,
+    territoryArea: Math.round(Object.values(l.territory).reduce((a, poly) => a + polygonArea(poly), 0)),
   },
 };
 
@@ -691,7 +823,7 @@ await mkdir("packages/client/src", { recursive: true });
 await writeFile(output, `${JSON.stringify(payload, null, 2)}\n`);
 console.log(`map-layout: wrote ${output}`);
 console.log(
-  `map-layout: viewBox ${l.viewSize.toFixed(0)}px, crossings=${v.crossings.total} ` +
+  `map-layout: viewBox ${l.viewBox.width.toFixed(0)}x${l.viewBox.height.toFixed(0)}px, ring ${l.ringRadius}, crossings=${v.crossings.total} ` +
     `(local-local ${v.crossings.localLocal}, local-cross ${v.crossings.localCross}, cross-cross ${v.crossings.crossCross}), ` +
     `clips=${v.clips.count}, collisions=${v.collisions.count}, spacing scale=${scale.toFixed(2)}`,
 );

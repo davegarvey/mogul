@@ -2,213 +2,213 @@
   "regions": [
     {
       "id": "coast-north",
-      "name": "North Coast",
+      "name": "Silver Screen Shore",
       "minPlayers": 2
     },
     {
       "id": "coast-south",
-      "name": "Emerald Coast",
+      "name": "Golden Reel Coast",
       "minPlayers": 2
     },
     {
       "id": "coast-west",
-      "name": "Sunset Coast",
+      "name": "Marquee Coast",
       "minPlayers": 2
     },
     {
       "id": "heartland-east",
-      "name": "Veridian Heartland",
+      "name": "Picture Palace Valley",
       "minPlayers": 3
     },
     {
       "id": "heartland-central",
-      "name": "Central Heartland",
+      "name": "Double Feature Plains",
       "minPlayers": 3
     },
     {
       "id": "heartland-west",
-      "name": "Silverado Heartland",
+      "name": "Horse Opera Range",
       "minPlayers": 4
     }
   ],
   "cities": [
     {
       "id": "cn1",
-      "name": "Bay Harbor",
+      "name": "Klieg Harbor",
       "slots": 3,
       "region": "coast-north"
     },
     {
       "id": "cn2",
-      "name": "Halcyon",
+      "name": "Starlet Cove",
       "slots": 2,
       "region": "coast-north"
     },
     {
       "id": "cn3",
-      "name": "Port Meridian",
+      "name": "Premiere Point",
       "slots": 3,
       "region": "coast-north"
     },
     {
       "id": "cn4",
-      "name": "Santa Verona",
+      "name": "Celluloid City",
       "slots": 2,
       "region": "coast-north"
     },
     {
       "id": "cn5",
-      "name": "Northgate",
+      "name": "Newsreel Landing",
       "slots": 2,
       "region": "coast-north"
     },
     {
       "id": "cs1",
-      "name": "Emerald Bay",
+      "name": "Backlot Bay",
       "slots": 3,
       "region": "coast-south"
     },
     {
       "id": "cs2",
-      "name": "Solano",
+      "name": "Bijou Beach",
       "slots": 2,
       "region": "coast-south"
     },
     {
       "id": "cs3",
-      "name": "Cape Aurore",
+      "name": "Cameo Cape",
       "slots": 3,
       "region": "coast-south"
     },
     {
       "id": "cs4",
-      "name": "Las Puntas",
+      "name": "Fade-In",
       "slots": 2,
       "region": "coast-south"
     },
     {
       "id": "cs5",
-      "name": "Marina del Oro",
+      "name": "Las Estrellas",
       "slots": 2,
       "region": "coast-south"
     },
     {
       "id": "cw1",
-      "name": "Paloma Beach",
+      "name": "Spotlight Beach",
       "slots": 3,
       "region": "coast-west"
     },
     {
       "id": "cw2",
-      "name": "Sunset Pier",
+      "name": "Rialto Pier",
       "slots": 2,
       "region": "coast-west"
     },
     {
       "id": "cw3",
-      "name": "Corona Bay",
+      "name": "Mogul Heights",
       "slots": 3,
       "region": "coast-west"
     },
     {
       "id": "cw4",
-      "name": "Mal Pais",
+      "name": "Cutaway Key",
       "slots": 2,
       "region": "coast-west"
     },
     {
       "id": "cw5",
-      "name": "Whisper Key",
+      "name": "Close-Up Cove",
       "slots": 2,
       "region": "coast-west"
     },
     {
       "id": "he1",
-      "name": "Cedar Falls",
+      "name": "Majestic Falls",
       "slots": 2,
       "region": "heartland-east"
     },
     {
       "id": "he2",
-      "name": "Fairview",
+      "name": "Nickel Grove",
       "slots": 3,
       "region": "heartland-east"
     },
     {
       "id": "he3",
-      "name": "Millbrook",
+      "name": "Usherville",
       "slots": 2,
       "region": "heartland-east"
     },
     {
       "id": "he4",
-      "name": "Veridian",
+      "name": "Palace Junction",
       "slots": 3,
       "region": "heartland-east"
     },
     {
       "id": "he5",
-      "name": "Elmwood",
+      "name": "Matinee Mills",
       "slots": 2,
       "region": "heartland-east"
     },
     {
       "id": "hc1",
-      "name": "Barlow",
+      "name": "Ticketburg",
       "slots": 3,
       "region": "heartland-central"
     },
     {
       "id": "hc2",
-      "name": "Prairie Hill",
+      "name": "Popcorn Prairie",
       "slots": 2,
       "region": "heartland-central"
     },
     {
       "id": "hc3",
-      "name": "Goldfield",
+      "name": "Frameton",
       "slots": 3,
       "region": "heartland-central"
     },
     {
       "id": "hc4",
-      "name": "Redwater",
+      "name": "Cliffhanger Bluff",
       "slots": 2,
       "region": "heartland-central"
     },
     {
       "id": "hc5",
-      "name": "Sutter Ridge",
+      "name": "Twin Bill Corners",
       "slots": 2,
       "region": "heartland-central"
     },
     {
       "id": "hw1",
-      "name": "Silverado",
+      "name": "Stuntman's Gulch",
       "slots": 3,
       "region": "heartland-west"
     },
     {
       "id": "hw2",
-      "name": "Lone Pine",
+      "name": "Location Mesa",
       "slots": 2,
       "region": "heartland-west"
     },
     {
       "id": "hw3",
-      "name": "Calverton",
+      "name": "Tumbleweed Crossing",
       "slots": 3,
       "region": "heartland-west"
     },
     {
       "id": "hw4",
-      "name": "Dust Springs",
+      "name": "Stagecoach Flats",
       "slots": 2,
       "region": "heartland-west"
     },
     {
       "id": "hw5",
-      "name": "Argonne",
+      "name": "Posse Point",
       "slots": 2,
       "region": "heartland-west"
     }

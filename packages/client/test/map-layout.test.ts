@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_RULES } from "@mogul/engine";
 import layout from "../src/map-layout.generated.json" with { type: "json" };
+import { pointInPolygon, polygonDistance } from "../../../tools/geometry.js";
 
 const R = DEFAULT_RULES;
 
@@ -21,12 +22,42 @@ describe("generated map layout", () => {
     }
   });
 
-  it("places every city inside its own territory", () => {
+  it("places every city inside its own territory polygon", () => {
     for (const city of R.map.cities) {
       const pos = layout.cities[city.id];
-      const geom = layout.regions[city.region];
-      const d = Math.hypot(pos.x - geom.center.x, pos.y - geom.center.y);
-      expect(d, `city ${city.id} outside territory`).toBeLessThanOrEqual(geom.radius);
+      const poly = layout.regions[city.region as keyof typeof layout.regions].polygon;
+      expect(pointInPolygon(pos, poly), `city ${city.id} outside territory`).toBe(true);
+    }
+  });
+
+  it("keeps territories apart", () => {
+    const ids = Object.keys(layout.regions) as (keyof typeof layout.regions)[];
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        expect(polygonDistance(layout.regions[ids[i]].polygon, layout.regions[ids[j]].polygon), `${ids[i]} x ${ids[j]}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("never routes a cross-region edge through an unrelated territory polygon", () => {
+    for (const edge of R.map.edges) {
+      const from = R.map.cities.find((c) => c.id === edge.from)!.region;
+      const to = R.map.cities.find((c) => c.id === edge.to)!.region;
+      if (from === to) continue;
+      const pts = layout.edges[`${edge.from}:${edge.to}` as keyof typeof layout.edges].points;
+      for (const region of R.map.regions) {
+        if (region.id === from || region.id === to) continue;
+        const poly = layout.regions[region.id as keyof typeof layout.regions].polygon;
+        // allow grazing within the generator's 6px tolerance by testing a shrunk copy
+        const c = poly.reduce((a, p) => ({ x: a.x + p.x / poly.length, y: a.y + p.y / poly.length }), { x: 0, y: 0 });
+        const shrunk = poly.map((p) => {
+          const dx = p.x - c.x;
+          const dy = p.y - c.y;
+          const len = Math.hypot(dx, dy) || 1;
+          return { x: p.x - (dx / len) * 6, y: p.y - (dy / len) * 6 };
+        });
+        for (const p of pts) expect(pointInPolygon(p, shrunk), `${edge.from}:${edge.to} through ${region.id}`).toBe(false);
+      }
     }
   });
 

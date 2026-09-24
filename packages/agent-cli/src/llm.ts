@@ -51,7 +51,7 @@ export function buildPrompt(snap: SnapshotEnvelope, rules: GameRules, seatId: st
     .join(" | ");
 
   return [
-    `You are "${me.name}" playing Mogul, a Power Grid-style Hollywood studio game.`,
+    `You are "${me.name}" playing Mogul, an 18XX-style economic-network Hollywood studio game.`,
     `Round ${s.round}, era ${s.era}, phase: ${s.phase}.`,
     `Your cash: ${me.cash}. Your theaters: ${me.theaters.length} (${me.theaters.join(", ") || "none"}).`,
     `Your properties: ${mine || "none"}.`,

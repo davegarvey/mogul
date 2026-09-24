@@ -14,7 +14,8 @@ interface GeneratedLayout {
   version: number;
   viewBox: { x: number; y: number; width: number; height: number };
   scale: number;
-  regions: Record<string, { center: Point; radius: number; polygon: Point[]; label: Point }>;
+  /** Territory outline (content hull plus margin), its centroid, and the label anchor. */
+  regions: Record<string, { center: Point; polygon: Point[]; label: Point }>;
   cities: Record<string, { x: number; y: number; region: string }>;
   edges: Record<string, { kind: "local" | "cross"; points: Point[]; label: Point }>;
   stats: {

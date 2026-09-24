@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Core rules engine for Mogul: the five-phase round, the money loop, income, the era clock, and victory — the Power Grid skeleton that every other system hangs on. Theaters are *built* during the exhibition phase; they are *lit* on opening night when a picture is actually shown. Built theaters drive turn order, era triggers, and the endgame trigger; lit theaters drive income and victory.
+Core rules engine for Mogul: the five-phase round, the money loop, income, the era clock, and victory — the 18XX-style economic-network skeleton that every other system hangs on. Theaters are *built* during the exhibition phase; they are *lit* on opening night when a picture is actually shown. Built theaters drive turn order, era triggers, and the endgame trigger; lit theaters drive income and victory.
 
 ## Requirements
 

@@ -41,7 +41,6 @@ let room: RoomState | null = null;
 let snapshot: SnapshotEnvelope | null = null;
 let mySeatId: string | null = null;
 let myIsHost = false;
-let clockDeadline: number | null = null;
 
 function showView(name: "join" | "lobby" | "game"): void {
   for (const v of ["view-join", "view-lobby", "view-game"]) {
@@ -109,7 +108,7 @@ function renderLobby(): void {
   $("room-code").textContent = room.code;
   $("lobby-status").textContent = room.status;
   const configEl = $("room-config");
-  configEl.textContent = `Move clock: ${room.config.clockSeconds}s per turn · Disconnect grace: ${room.config.graceSeconds}s (then a bot takes over)`;
+  configEl.textContent = `If a player disconnects, a bot takes over their seat after ${room.config.graceSeconds}s.`;
   const roster = $("roster");
   roster.innerHTML = "";
   for (const seat of room.seats) {
@@ -130,7 +129,6 @@ function renderGame(): void {
   $("era-pill").textContent = `Era: ${s.era}`;
   $("phase-pill").textContent = `Phase: ${s.phase}`;
   $("round-pill").textContent = `Round ${s.round}`;
-  clockDeadline = snapshot.clockDeadline ?? null;
   renderTurnPill();
 
   renderPlayers(s);
@@ -142,7 +140,7 @@ function renderGame(): void {
   renderActions();
 }
 
-/** Turn banner: whose move it is and how much clock remains. */
+/** Turn banner: whose move it is. */
 function renderTurnPill(): void {
   const pill = $("turn-pill");
   const snap = snapshot;
@@ -152,31 +150,15 @@ function renderTurnPill(): void {
   }
   if (snap.ended) {
     pill.textContent = "Game over";
-    pill.classList.remove("urgent");
     return;
   }
   if (snap.activeSeat === null) {
     pill.textContent = "Automatic phase…";
-    pill.classList.remove("urgent");
     return;
   }
   const who = snap.state.players.find((p) => p.id === snap.activeSeat)?.name ?? "?";
-  const mine = snap.activeSeat === mySeatId ? "Your turn" : `Waiting on ${who}`;
-  if (clockDeadline === null) {
-    pill.textContent = mine;
-    pill.classList.remove("urgent");
-    return;
-  }
-  const remain = Math.max(0, Math.round((clockDeadline - Date.now()) / 1000));
-  pill.textContent = `${mine} — ${remain}s`;
-  pill.classList.toggle("urgent", remain <= 10);
+  pill.textContent = snap.activeSeat === mySeatId ? "Your turn" : `Waiting on ${who}`;
 }
-
-setInterval(() => {
-  if (snapshot && !snapshot.ended && clockDeadline !== null) {
-    renderTurnPill();
-  }
-}, 1000);
 
 function renderPlayers(s: GameState): void {
   const wrap = $("players");

@@ -1,24 +1,10 @@
-# game-ai Specification
+## REMOVED Requirements
 
-## Purpose
+### Requirement: Move clocks
+**Reason**: The clock only guarded against slow or stuck agents, and it put unnecessary time pressure on human players. When passing was not legal, it could hand a connected player's seat to a bot. Disconnects are covered by the lobby's grace-period bot handoff.
+**Migration**: None needed. Seats keep their turn until they act or disconnect. Rooms created with a `clockSeconds` config field ignore it.
 
-The AI players of Mogul: a scripted reference bot and an agent CLI client, both driving a seat through the same player protocol as humans.
-
-## Requirements
-
-### Requirement: Player protocol
-
-All players — human, bot, and agent — SHALL interact with the game through the same protocol: the server emits a complete state snapshot, and the player submits typed move commands. The snapshot SHALL contain the full open-information state: all money, properties, talent tracks, theaters, and era data, plus a state version that changes with every applied command. The server SHALL validate every command against the current state and reject illegal moves with a reason.
-
-#### Scenario: Snapshot is complete
-
-- **WHEN** any player requests the game state
-- **THEN** the response contains the entire public state with no hidden information
-
-#### Scenario: Illegal move is rejected
-
-- **WHEN** a player submits a bid exceeding their cash
-- **THEN** the server rejects the command with a reason, and the player may submit a legal command
+## MODIFIED Requirements
 
 ### Requirement: Scripted bot
 

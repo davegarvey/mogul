@@ -4,7 +4,6 @@ import {
   applyCommand,
   buildSnapshot,
   createGame,
-  getLegalActions,
   playerById,
 } from "@mogul/engine";
 import type { GameRules, GameState } from "@mogul/engine";
@@ -35,9 +34,6 @@ export class Room {
   rules: GameRules = DEFAULT_RULES;
   winnerId: string | null = null;
 
-  private clockTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Epoch ms when the current move clock was armed (null when none is running). */
-  private clockArmedAt: number | null = null;
   private graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private bot: Bot = scriptedBot(1);
 
@@ -72,12 +68,7 @@ export class Room {
   }
 
   private snapshotFor(seat: Seat): SnapshotEnvelope {
-    const snap = buildSnapshot(this.state!, this.rules, seat.id);
-    return {
-      ...snap,
-      clockSeconds: this.config.clockSeconds,
-      clockDeadline: this.clockArmedAt !== null ? this.clockArmedAt + this.config.clockSeconds * 1000 : null,
-    };
+    return buildSnapshot(this.state!, this.rules, seat.id);
   }
 
   private pushSnapshot(): void {
@@ -168,7 +159,6 @@ export class Room {
     if (!this.state || !seat) return;
     const res = applyCommand(this.state, this.rules, seatId, command as never);
     if (res.ok) {
-      this.clearClock();
       this.checkEnded();
       this.maybeTickBot();
       this.pushSnapshot();
@@ -181,7 +171,6 @@ export class Room {
     if (this.state?.ended && this.status === "playing") {
       this.status = "ended";
       this.winnerId = this.state.winnerId;
-      this.clearClock();
       this.push({ type: "game-ended", winnerId: this.state.winnerId!, reason: this.state.events.at(-1)?.type ?? "ended" });
     }
   }
@@ -192,10 +181,7 @@ export class Room {
     const pid = activePlayerId(this.state, this.rules);
     if (pid === null) return;
     const seat = this.seats.find((s) => s.id === pid);
-    if (!seat || (seat.kind !== "bot" && !seat.botControlled)) {
-      this.armClock(pid);
-      return;
-    }
+    if (!seat || (seat.kind !== "bot" && !seat.botControlled)) return;
     setImmediate(() => {
       if (!this.state || this.state.ended) return;
       if (activePlayerId(this.state, this.rules) !== pid) return;
@@ -209,45 +195,6 @@ export class Room {
         }
       }
     });
-  }
-
-  private armClock(pid: string): void {
-    this.clearClock();
-    this.clockArmedAt = Date.now();
-    this.clockTimer = setTimeout(() => this.expireClock(pid), this.config.clockSeconds * 1000);
-  }
-
-  private expireClock(pid: string): void {
-    if (!this.state || this.state.ended) return;
-    if (activePlayerId(this.state, this.rules) !== pid) return;
-    const seat = this.seats.find((s) => s.id === pid);
-    if (!seat) return;
-    const legal = getLegalActions(this.state, this.rules, pid);
-    const pass = legal.find((a) => a.command.type === "pass-auction" || a.command.type === "end-turn");
-    if (pass) {
-      // Clock fallback: pass where legal.
-      const res = applyCommand(this.state, this.rules, pid, pass.command);
-      if (res.ok) {
-        this.checkEnded();
-        this.maybeTickBot();
-        this.pushSnapshot();
-        return;
-      }
-    }
-    // Otherwise: bot handoff for the seat.
-    if (seat.kind === "human") {
-      seat.botControlled = true;
-      this.pushRoomState();
-    }
-    this.maybeTickBot();
-  }
-
-  private clearClock(): void {
-    this.clockArmedAt = null;
-    if (this.clockTimer) {
-      clearTimeout(this.clockTimer);
-      this.clockTimer = null;
-    }
   }
 
   handle(seatId: string, msg: ClientMessage): void {
@@ -279,7 +226,6 @@ export class Room {
   }
 
   cleanup(): void {
-    this.clearClock();
     for (const t of this.graceTimers.values()) clearTimeout(t);
     this.graceTimers.clear();
   }
@@ -288,7 +234,6 @@ export class Room {
 export function createRoom(config: Partial<RoomConfig>, rand: () => number): Room {
   const full: RoomConfig = {
     maxPlayers: 4,
-    clockSeconds: 60,
     graceSeconds: 30,
     seed: Math.floor(rand() * 1_000_000),
     ...config,

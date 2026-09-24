@@ -61,7 +61,7 @@ describe("agent CLI end-to-end", () => {
     // Host room with three bots and one agent seat.
     const host = connect();
     await open(host.ws);
-    host.send({ type: "create-room", nickname: "Host", config: { maxPlayers: 4, clockSeconds: 1, graceSeconds: 1 } });
+    host.send({ type: "create-room", nickname: "Host", config: { maxPlayers: 4, graceSeconds: 1 } });
     const rs = await host.waitFor((m) => m.type === "room-state");
     if (rs.type !== "room-state") throw new Error("no room");
     const code = rs.room.code;
@@ -79,6 +79,8 @@ describe("agent CLI end-to-end", () => {
     await agent.join(code);
     host.send({ type: "start-game" });
     await host.waitFor((m) => m.type === "snapshot");
+    // The host only observes: disconnect it so the grace-period handoff gives its seat to a bot.
+    host.ws.close();
 
     let guard = 0;
     while (!agent.result.finished && guard++ < 60) {
@@ -96,7 +98,7 @@ describe("agent CLI end-to-end", () => {
   it("falls back to pass/end-turn when the LLM keeps producing bad replies", async () => {
     const host = connect();
     await open(host.ws);
-    host.send({ type: "create-room", nickname: "Host", config: { maxPlayers: 2, clockSeconds: 1, graceSeconds: 1 } });
+    host.send({ type: "create-room", nickname: "Host", config: { maxPlayers: 2, graceSeconds: 1 } });
     const rs = await host.waitFor((m) => m.type === "room-state");
     if (rs.type !== "room-state") throw new Error("no room");
     const code = rs.room.code;
@@ -111,6 +113,8 @@ describe("agent CLI end-to-end", () => {
     await agent.join(code);
     host.send({ type: "start-game" });
     await host.waitFor((m) => m.type === "snapshot");
+    // The host only observes: disconnect it so the grace-period handoff gives its seat to a bot.
+    host.ws.close();
 
     await agent.playTurn();
     expect(agent.result.fallbacks).toBeGreaterThanOrEqual(1);

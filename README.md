@@ -28,7 +28,7 @@ Then open <http://localhost:8137>.
 
 **Do you need bots?** A game needs at least two seats. On your own, add one to three bots. With two or more people, bots are optional: they fill out the table, and the game suits three or four players best.
 
-If someone disconnects, they have 30 seconds to rejoin before a bot takes over their seat. Each turn has a 60-second clock.
+There is no turn timer, so take as long as you like. If someone disconnects, they have 30 seconds to rejoin before a bot takes over their seat.
 
 ### Playing with a friend on another computer
 

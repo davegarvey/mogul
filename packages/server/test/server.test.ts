@@ -79,7 +79,7 @@ describe("lobby", () => {
   it("a full game completes with a bot filling in after a disconnect", async () => {
     const host = connect();
     await open(host.ws);
-    host.send({ type: "create-room", nickname: "Dave", config: { clockSeconds: 2, graceSeconds: 1, maxPlayers: 4 } });
+    host.send({ type: "create-room", nickname: "Dave", config: { graceSeconds: 1, maxPlayers: 4 } });
     const rs = await host.waitFor((m) => m.type === "room-state");
     if (rs.type !== "room-state") return;
     const code = rs.room.code;
@@ -91,12 +91,22 @@ describe("lobby", () => {
     host.send({ type: "add-bot" });
     await host.waitFor((m) => m.type === "room-state" && m.room.seats.length === 4);
 
+    // The host plays its own seat: pass or end the turn where legal, otherwise take the first legal action.
+    const hostId = rs.room.seats[0].id;
+    host.ws.on("message", (data) => {
+      const msg = JSON.parse(data.toString()) as ServerMessage;
+      if (msg.type !== "snapshot" || msg.snapshot.activeSeat !== hostId || msg.snapshot.actions.length === 0) return;
+      const actions = msg.snapshot.actions;
+      const pick = actions.find((a) => a.command.type === "pass-auction" || a.command.type === "end-turn") ?? actions[0];
+      host.send({ type: "command", command: pick.command });
+    });
+
     // Guest disconnects before start; grace period elapses -> bot handoff.
     guest.ws.close();
     host.send({ type: "start-game" });
     await host.waitFor((m) => m.type === "room-state" && m.room.seats.every((s) => s.botControlled || s.connected));
 
-    // Game should eventually end (bots + clock fallbacks keep it moving).
+    // Game should eventually end (bots plus the host's own moves keep it going).
     const end = await host.waitFor((m) => m.type === "game-ended", 60000);
     expect(end.type).toBe("game-ended");
     host.ws.close();
@@ -105,7 +115,7 @@ describe("lobby", () => {
   it("reconnect reattaches the seat and re-sends the full snapshot", async () => {
     const host = connect();
     await open(host.ws);
-    host.send({ type: "create-room", nickname: "Dave", config: { maxPlayers: 2, clockSeconds: 30 } });
+    host.send({ type: "create-room", nickname: "Dave", config: { maxPlayers: 2 } });
     const rs = await host.waitFor((m) => m.type === "room-state");
     if (rs.type !== "room-state") return;
     const code = rs.room.code;

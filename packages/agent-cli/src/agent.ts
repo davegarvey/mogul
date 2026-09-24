@@ -28,7 +28,7 @@ export interface AgentCliResult {
  * - on its turn, render the snapshot + legal action menu, ask the LLM for one action
  * - validate shape, submit the typed command with the snapshot state version
  * - re-render after every ack; on server rejection, feed the reason back for repair
- * - bounded retries; fallback to a clock-safe legal move on exhaustion
+ * - bounded retries; fallback to pass/end-turn, else the first legal move, on exhaustion
  */
 export class AgentCli {
   private ws: WebSocket;
@@ -103,8 +103,7 @@ export class AgentCli {
   private async act(snap: SnapshotEnvelope): Promise<void> {
     const actions = snap.actions;
     if (actions.length === 0) {
-      // Nothing legal: fall back to pass/end-turn via the server clock rules.
-      this.result.fallbacks++;
+      // Nothing legal for this seat right now.
       return;
     }
     const prompt = buildPrompt(snap, DEFAULT_RULES, this.seatId!);
@@ -150,10 +149,10 @@ export class AgentCli {
         }
       }
     }
-    // Retries exhausted: pick the clock-safe fallback (pass/end-turn) if legal, else do nothing.
-    const fallback = getLegalActions(snap.state, DEFAULT_RULES, this.seatId!).find(
-      (a) => a.command.type === "pass-auction" || a.command.type === "end-turn",
-    );
+    // Retries exhausted: pass/end-turn if legal, else the first legal action, so the seat never stalls.
+    const legal = getLegalActions(snap.state, DEFAULT_RULES, this.seatId!);
+    const fallback =
+      legal.find((a) => a.command.type === "pass-auction" || a.command.type === "end-turn") ?? legal[0];
     if (fallback) {
       this.result.fallbacks++;
       this.send({ type: "command", command: fallback.command });

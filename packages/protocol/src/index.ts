@@ -17,7 +17,6 @@ export interface SeatInfo {
 
 export interface RoomConfig {
   maxPlayers: number;
-  clockSeconds: number;
   graceSeconds: number;
   seed: number;
 }
@@ -61,10 +60,6 @@ export interface SnapshotEnvelope {
   state: GameState;
   /** Legal actions for the receiving seat (empty when it is not their turn). */
   actions: Action[];
-  /** Move-clock config for the room (seconds), when a per-seat clock is running. */
-  clockSeconds?: number;
-  /** Epoch ms when the active seat's move clock expires (null when no clock is running). */
-  clockDeadline?: number | null;
 }
 
 /** Transport-agnostic frame wrapping: the same envelope works over WebSocket, HTTP, or in-process. */

@@ -1,13 +1,21 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Mogul is a 2–4 player digital board game on the Power Grid skeleton (auction, resource
+  market, network building, income), set in 1920s–1950s Hollywood.
+  Tech stack: TypeScript npm-workspaces monorepo. packages/engine is a pure, deterministic
+  rules engine; protocol holds shared wire types; server is HTTP + WebSocket with lobby and
+  rooms; client is a vanilla DOM/SVG browser client bundled with esbuild; bot holds the
+  scripted bots and tournament harness; agent-cli is the LLM player. Tests use vitest.
+  Rules are data: prices, decks, income table, map and eras live in
+  packages/engine/src/data/*.json. Tune by editing data and running `npm run harness`.
+  The server is authoritative: clients receive full open-information snapshots and send
+  typed commands.
+  Capability ownership: map-layout owns map geometry (generated layout); game-client owns
+  rendering and interaction.
+  Sync spec deltas before archiving a change. When a change supersedes another, carry over
+  any of its requirements that still apply.
+  Write in British English.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.

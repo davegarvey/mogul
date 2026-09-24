@@ -102,10 +102,10 @@ export class Room {
       clearTimeout(grace);
       this.graceTimers.delete(seat.id);
     }
-    if (!seat.botControlled) {
-      seat.connected = true;
-      seat.send = send;
-    }
+    // A returning player always reclaims their seat, even after a bot has taken over.
+    seat.botControlled = false;
+    seat.connected = true;
+    seat.send = send;
     this.pushRoomState();
     // Reconnect: re-send the full current snapshot, no event replay.
     if (this.state) {

@@ -28,7 +28,7 @@ Then open <http://localhost:8137>.
 
 **Do you need bots?** A game needs at least two seats. On your own, add one to three bots. With two or more people, bots are optional: they fill out the table, and the game suits three or four players best.
 
-There is no turn timer, so take as long as you like. If someone disconnects, they have 30 seconds to rejoin before a bot takes over their seat.
+There is no turn timer, so take as long as you like. If someone disconnects, a bot takes over their seat after 30 seconds. They can reload the page or rejoin with the same nickname and room code at any time to take the seat back.
 
 ### Playing with a friend on another computer
 
@@ -39,13 +39,13 @@ Everyone connects to one running server, so only one of you needs to run `npm ru
 
 ## How to play
 
-A game lasts about 12–15 rounds. Each round has five phases, and the screen shows the current phase, era, round and whose turn it is. When it is your turn, your legal moves appear as buttons at the bottom of the screen. Scroll down to see every studio's money and holdings, the two markets, and a log of what has happened.
+A game lasts about 12–15 rounds. The bar at the top shows the phase you're in (Rights auction → Talent → Build → Opening night), the round, the era and whose turn it is. The main area always shows the current phase, with each button on the thing it acts on. The side panel shows the turn order, every studio's money and holdings, a thumbnail of the map (click **Expand** to see the full map at any time) and a log of what has happened.
 
 1. **Turn order.** The player with the most theatres goes first in the auction. In the talent and building phases the order reverses, so players who are behind buy and build first.
-2. **Rights auction.** In turn order, each player may put a property from the current market up for auction or pass. The others then bid or drop out. Each property has an *output* (the most theatres it can supply per round) and a *talent type* it needs. You can win at most one property per round, and in the first round every player must buy one.
-3. **Talent market.** Contract talent for your properties: extras, character actors, stars or A-listers. Each theatre you light uses one unit of the matching talent. Prices rise as the supply shrinks and fall back as the market restocks, so buying first matters. A property can hold up to twice the talent it needs for one opening night.
-4. **Exhibition.** Build theatres in cities: $10 for the first slot, $15 for the second and $20 for the third, plus the distribution cost of each route between your network and the new city. Your first theatre can go anywhere. You may have only one theatre in each city. The map highlights the cities you can build in now.
-5. **Opening night.** Each studio lights as many theatres as its properties and talent can supply, and is paid according to that number (0 → $10, 1 → $22, 2 → $33, … up to 20 → $150). Talent is used up.
+2. **Rights auction.** In turn order, each player may put a property from the current market up for auction (**Auction from $X** on its card) or pass. The others then bid or drop out. The **On the block** panel shows the high bid, who holds it and who's still in; use − and + to choose your bid, so you can raise by more than $1. Each property has an *output* (the most theatres it can supply per round) and a *talent type* it needs. You can win at most one property per round, and in the first round every player must buy one.
+3. **Talent market.** Contract talent for your properties: extras, character actors, stars or A-listers. The talent screen shows what each property needs for a full opening night; pick a quantity and it shows the total cost before you buy. Each theatre you light uses one unit of the matching talent. Prices rise as the supply shrinks and fall back as the market restocks, so buying first matters. A property can hold up to twice the talent it needs for one opening night.
+4. **Exhibition.** Build theatres in cities: $10 for the first slot, $15 for the second and $20 for the third, plus the distribution cost of each route between your network and the new city. Your first theatre can go anywhere. You may have only one theatre in each city. During your build turn the map fills the main area, and cities you can build in show a green badge with the total cost: click one to build.
+5. **Opening night.** Each studio lights as many theatres as its properties and talent can supply, and is paid according to that number (0 → $10, 1 → $22, 2 → $33, … up to 20 → $150). Talent is used up. A summary of what each studio lit and earned appears at the start of the next round.
 
 ### The three eras
 
@@ -104,4 +104,3 @@ Rules are stored as data. To change prices, the income table, the property deck,
 ## Known limitations
 
 - The scripted bots tend to overspend in the first round, so they are weak early on.
-- In small windows, the map fills the screen and the market and player panels sit below it, so you have to scroll.

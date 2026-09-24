@@ -144,4 +144,37 @@ describe("lobby", () => {
     void before;
     re.ws.close();
   });
+
+  it("a player returning after the bot handoff reclaims their seat", async () => {
+    const host = connect();
+    await open(host.ws);
+    host.send({ type: "create-room", nickname: "Dave", config: { maxPlayers: 2, graceSeconds: 1 } });
+    const rs = await host.waitFor((m) => m.type === "room-state");
+    if (rs.type !== "room-state") return;
+    const code = rs.room.code;
+
+    const guest = connect();
+    await open(guest.ws);
+    guest.send({ type: "join-room", code, nickname: "Sam" });
+    await guest.waitFor((m) => m.type === "room-state" && m.room.seats.length === 2);
+    host.send({ type: "start-game" });
+    await host.waitFor((m) => m.type === "snapshot");
+
+    // Sam drops; after the grace period a bot takes the seat.
+    guest.ws.close();
+    await host.waitFor((m) => m.type === "room-state" && m.room.seats.some((s) => s.nickname === "Sam" && s.botControlled), 5000);
+
+    const back = connect();
+    await open(back.ws);
+    back.send({ type: "join-room", code, nickname: "Sam" });
+    const state = await back.waitFor((m) => m.type === "room-state");
+    if (state.type !== "room-state") return;
+    const sam = state.room.seats.find((s) => s.nickname === "Sam")!;
+    expect(sam.botControlled).toBe(false);
+    expect(sam.connected).toBe(true);
+    const snap = await back.waitFor((m) => m.type === "snapshot");
+    expect(snap.type).toBe("snapshot");
+    back.ws.close();
+    host.ws.close();
+  });
 });

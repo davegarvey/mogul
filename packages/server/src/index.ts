@@ -30,6 +30,9 @@ const httpServer = createServer(async (req, res) => {
       js: "application/javascript",
       css: "text/css",
       json: "application/json",
+      svg: "image/svg+xml",
+      png: "image/png",
+      ico: "image/x-icon",
     };
     res.writeHead(200, { "content-type": types[ext] ?? "application/octet-stream" });
     res.end(body);

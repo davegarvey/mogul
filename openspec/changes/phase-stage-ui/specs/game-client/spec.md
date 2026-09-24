@@ -93,6 +93,14 @@ The browser client SHALL present the active player's legal actions as controls o
 ### Requirement: Phase-gated action affordances
 The client SHALL present controls only to the active player and only for the current phase. During automatic phases (moguls-assemble, opening-night) and during other players' turns, the client SHALL present no action controls. Market prices, talent tracks, the auction panel and map costs SHALL remain visible in every phase, with no controls that cannot be used in that phase.
 
+#### Scenario: Single contextual end-turn control
+- **WHEN** the active player is in the talent market
+- **THEN** the client presents the legal talent purchases and exactly one "End your talent purchases" control
+
+#### Scenario: Data visible without controls
+- **WHEN** the player expands the map outside the exhibition phase
+- **THEN** the map shows route and build costs without build affordances
+
 #### Scenario: Automatic phase shows no controls
 - **WHEN** an automatic phase is resolving
 - **THEN** the client presents no action controls

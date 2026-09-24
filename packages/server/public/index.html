@@ -12,7 +12,8 @@
     * { box-sizing: border-box; }
     body {
       font-family: Georgia, "Times New Roman", serif;
-      background: #1a1612; color: var(--ink); margin: 0; padding: 16px;
+      background: #1a1612; color: var(--ink); margin: 0 auto; padding: 16px;
+      max-width: 1280px;
     }
     body.era-silent { filter: grayscale(1); }
     body.era-talkies { filter: sepia(0.45); }
@@ -103,6 +104,8 @@
 
     /* --- exhibition map --- */
     .map { width: 100%; height: auto; display: block; }
+    /* keep the full map within one screen; the SVG letterboxes to fit */
+    #stage .map { max-height: calc(100vh - 140px); }
     .region.in { fill: #2b251d; fill-opacity: 0.55; stroke: #4a4032; stroke-width: 1; stroke-dasharray: 5 5; }
     .region.out { fill: #14100b; fill-opacity: 0.4; stroke: #3a3226; stroke-width: 1; stroke-dasharray: 5 5; }
     .region-label { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; text-anchor: middle; }

@@ -100,7 +100,3 @@ npm run typecheck   # type-check every package
 | `packages/agent-cli` | LLM agent client |
 
 Rules are stored as data. To change prices, the income table, the property deck, the map or the endgame targets, edit the JSON files in `packages/engine/src/data/` and run the harness. Design documents and specs are in `openspec/`.
-
-## Known limitations
-
-- The scripted bots tend to overspend in the first round, so they are weak early on.

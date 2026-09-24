@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_RULES, activePlayerId, applyCommand } from "@mogul/engine";
+import { DEFAULT_RULES, activePlayerId, applyCommand, createGame } from "@mogul/engine";
 import { createGameForBot, scriptedBot, naiveBot } from "../src/index.js";
 
 describe("scripted bot legality", () => {
@@ -58,5 +58,29 @@ describe("scripted bot legality", () => {
       if (!res.ok) rejections++;
     }
     expect(rejections).toBe(0);
+  });
+
+  it("keeps enough cash in round 1 to build and light a theatre", () => {
+    const rules = DEFAULT_RULES;
+    const failures: string[] = [];
+    for (const count of [3, 4]) {
+      for (let seed = 1; seed <= 20; seed++) {
+        const names = ["Red", "Gold", "Blue", "Green"].slice(0, count);
+        const state = createGame(names.map((name, i) => ({ id: `p${i}`, name })), rules, seed);
+        const bots = names.map((_, i) => scriptedBot(seed * 10 + i));
+        let guard = 0;
+        while (state.round === 1 && !state.ended && guard++ < 500) {
+          const pid = activePlayerId(state, rules)!;
+          const cmd = bots[state.players.findIndex((p) => p.id === pid)].chooseAction(state, rules, pid)!;
+          applyCommand(state, rules, pid, { ...cmd, stateVersion: state.version });
+        }
+        for (const p of state.players) {
+          if (p.theaters.length < 1 || p.litLastNight < 1) {
+            failures.push(`${count}p seed ${seed} ${p.name}: built ${p.theaters.length}, lit ${p.litLastNight}, cash ${p.cash}`);
+          }
+        }
+      }
+    }
+    expect(failures).toEqual([]);
   });
 });

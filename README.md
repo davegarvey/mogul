@@ -1,6 +1,6 @@
 # Mogul
 
-A board game for 2–4 players about the Hollywood studio system of the 1920s–1950s. It is built on the economic skeleton of *Power Grid*: you bid for film properties, contract talent to make pictures, build a network of theatres, and earn box office for every theatre you can light on opening night. Money is the only resource.
+A board game for 2–4 players about the Hollywood studio system of the 1920s–1950s. It is built on an 18XX-style economic-network skeleton: you bid for film properties, contract talent to make pictures, build a network of theatres, and earn box office for every theatre you can light on opening night. Money is the only resource.
 
 It runs in the browser. Friends join a room by code, and any empty seat can be filled by a computer player.
 

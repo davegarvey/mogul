@@ -53,6 +53,8 @@ let lastPhase: string | null = null;
 let mapExpanded = false;
 /** A command is in flight: controls stay disabled until the next snapshot or rejection. */
 let awaiting = false;
+/** The WebSocket is open; controls are disabled while it is down. */
+let connected = false;
 /** Opening night number whose summary the player has dismissed (or acted past). */
 let dismissedNight = 0;
 /** Bid amount chosen in the open auction, keyed by property and current bid. */
@@ -72,6 +74,7 @@ function connect(): void {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}`);
   ws.onopen = () => {
+    connected = true;
     // Rejoin the stored room after a reload or a dropped connection; the server
     // reattaches a returning player's seat by nickname.
     if (storage.code && storage.nickname) {
@@ -84,6 +87,11 @@ function connect(): void {
     handle(msg);
   };
   ws.onclose = () => {
+    // Nothing in flight will be answered: release the lock and say why controls are disabled.
+    connected = false;
+    awaiting = false;
+    pendingBuy = null;
+    renderGame();
     // Reconnect: rejoin the room with the same nickname and re-render from the fresh snapshot.
     if (storage.code && storage.nickname) {
       setTimeout(() => connect(), 1000);
@@ -198,7 +206,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
 
 function button(label: string, onClick: () => void, opts: { primary?: boolean; quiet?: boolean; enabled?: boolean } = {}): HTMLButtonElement {
   const b = el("button", opts.primary ? "primary" : opts.quiet ? "quiet" : undefined, label);
-  b.disabled = opts.enabled === false || awaiting;
+  b.disabled = opts.enabled === false || awaiting || !connected;
   b.onclick = onClick;
   return b;
 }
@@ -272,7 +280,8 @@ function renderHeader(s: GameState): void {
   const status = $("status");
   status.innerHTML = "";
   status.append(`Round ${s.round} · ${s.era === "golden" ? "golden age" : `${s.era} era`} · `);
-  if (snapshot!.ended) status.append("Game over");
+  if (!connected) status.append(el("span", "you", "Connection lost — reconnecting…"));
+  else if (snapshot!.ended) status.append("Game over");
   else if (myTurn()) status.append(el("span", "you", "Your turn"));
   else status.append(waitingOn(s));
 }

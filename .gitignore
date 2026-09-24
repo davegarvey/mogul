@@ -3,3 +3,7 @@ dist/
 *.tsbuildinfo
 .DS_Store
 packages/server/public/client.js
+
+# Personal Claude Code files
+.claude/settings.local.json
+.claude/launch.json

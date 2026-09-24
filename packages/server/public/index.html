@@ -98,43 +98,6 @@
     .money { color: #ffd700; }
     .turn-highlight { outline: 2px solid #ffd700; outline-offset: 2px; border-radius: 4px; }
     #turn-pill.urgent { background: #6b1f1f; border-color: #c0392b; color: #ffd7d7; }
-    /* --- regional network board --- */
-    .region-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-    .region-panel { min-width: 0; padding: 8px; border: 1px solid #4a4032; border-radius: 8px; background: #1e1913; }
-    .region-panel.inactive { opacity: 0.42; }
-    .region-head { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; margin-bottom: 8px; color: #d8ccb0; }
-    .region-head span { color: #8a7c63; font-size: 10px; text-align: right; }
-    .region-route { display: flex; align-items: stretch; gap: 4px; min-width: 0; }
-    .city-card { min-width: 0; flex: 1 1 0; padding: 6px 4px; border: 1px solid #3c352a; border-radius: 6px; background: #191510; }
-    .city-card.buildable { cursor: pointer; border-color: #4caf50; box-shadow: 0 0 0 1px #4caf5040; }
-    .city-card.buildable:hover { background: #223a25; }
-    .city-card.inactive { background: #14110d; }
-    .city-card.unreachable { opacity: 0.48; }
-    .city-head { display: flex; justify-content: space-between; gap: 3px; align-items: start; min-height: 30px; }
-    .city-head b { font-size: 11px; line-height: 1.1; overflow-wrap: anywhere; }
-    .build-badge { flex: 0 0 auto; padding: 1px 4px; border-radius: 999px; background: #1e5c2e; color: #c8f7d0; font-size: 10px; font-weight: bold; }
-    .city-slots { display: flex; gap: 3px; margin: 5px 0 3px; }
-    .city-slot { width: 9px; height: 9px; border: 1px solid #6b5736; border-radius: 50%; }
-    .city-slot.occupied { border-color: transparent; }
-    .city-slot.locked { opacity: 0.28; border-style: dashed; }
-    .city-meta { min-height: 13px; color: #8a7c63; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .local-link { flex: 0 0 14px; align-self: center; color: #9c8d72; font-size: 10px; text-align: center; border-top: 1px solid #5a4a30; padding-top: 2px; }
-    .bridges { margin-top: 10px; padding: 9px; border: 1px solid #4a4032; border-radius: 8px; background: #1e1913; }
-    .bridge-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 7px; }
-    .bridge-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr); gap: 5px; align-items: center; padding: 5px; border: 1px solid #3c352a; border-radius: 5px; background: #191510; }
-    .bridge-row.inactive { opacity: 0.45; }
-    .bridge-end { min-width: 0; display: flex; flex-direction: column; }
-    .bridge-end b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
-    .bridge-end small { color: #8a7c63; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
-    .bridge-cost { color: #ffd700; text-align: center; font-weight: bold; border-top: 1px solid #6b5736; border-bottom: 1px solid #6b5736; padding: 1px 0; }
-    @media (max-width: 1200px) {
-      .region-board, .bridge-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-    @media (max-width: 760px) {
-      .region-board, .bridge-grid { grid-template-columns: 1fr; }
-      .region-route { overflow-x: auto; padding-bottom: 4px; }
-      .city-card { min-width: 112px; }
-    }
   </style>
 </head>
 <body>

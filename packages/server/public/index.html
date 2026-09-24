@@ -15,8 +15,14 @@
       background: #1a1612; color: var(--ink); margin: 0 auto; padding: 16px;
       max-width: 1280px;
     }
-    body.era-silent { filter: grayscale(1); }
-    body.era-talkies { filter: sepia(0.45); }
+    /* Era tint: an overlay filters everything beneath it. A filter on body would reach every
+       descendant, so colour-coded elements (map, studio swatches) sit above the overlay instead. */
+    body.era-silent::after, body.era-talkies::after {
+      content: ""; position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    }
+    body.era-silent::after { backdrop-filter: grayscale(1); -webkit-backdrop-filter: grayscale(1); }
+    body.era-talkies::after { backdrop-filter: sepia(0.45); -webkit-backdrop-filter: sepia(0.45); }
+    .map, .legend .swatch { position: relative; z-index: 2; }
     header { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
     h1 { margin: 0; font-size: 28px; letter-spacing: 2px; color: var(--gold); }
     h2 { margin: 0 0 10px; font-size: 18px; font-weight: normal; }

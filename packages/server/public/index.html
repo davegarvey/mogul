@@ -8,7 +8,7 @@
   <link rel="alternate icon" href="/favicon-32.png" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <style>
-    :root { color-scheme: dark; --gold: #ffd700; --ink: #e8dcc8; --muted: #a89a7f; --faint: #8a7c63; --line: #3c352a; --line-strong: #6b5736; --card: #221d16; --well: #191510; --go: #4caf50; }
+    :root { color-scheme: dark; --gold: #ffd700; --ink: #e8dcc8; --muted: #a89a7f; --faint: #9a8b70; --line: #3c352a; --line-strong: #6b5736; --card: #221d16; --well: #191510; --go: #4caf50; }
     * { box-sizing: border-box; }
     body {
       font-family: Georgia, "Times New Roman", serif;
@@ -27,7 +27,7 @@
     h1 { margin: 0; font-size: 28px; letter-spacing: 2px; color: var(--gold); }
     h2 { margin: 0 0 10px; font-size: 18px; font-weight: normal; }
     h3 { margin: 14px 0 8px; font-size: 14px; font-weight: normal; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
-    .pill { background: #2b251d; border: 1px solid #4a4032; border-radius: 999px; padding: 2px 12px; font-size: 13px; }
+    .pill { background: #2b251d; border: 1px solid #4a4032; border-radius: 999px; padding: 2px 12px; font-size: 14px; }
     #views > div { display: none; }
     #views > div.active { display: block; }
     .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 8px 0; }
@@ -47,9 +47,9 @@
 
     /* --- header: stepper and status --- */
     #stepper { display: flex; gap: 4px; flex-wrap: wrap; }
-    .step { padding: 3px 12px; border-radius: 999px; font-size: 13px; color: var(--faint); border: 1px solid transparent; }
+    .step { padding: 3px 12px; border-radius: 999px; font-size: 14px; color: var(--faint); border: 1px solid transparent; }
     .step.current { color: var(--gold); border-color: var(--gold); background: #ffd70018; }
-    #status { margin-left: auto; font-size: 13px; color: var(--muted); }
+    #status { margin-left: auto; font-size: 14px; color: var(--muted); }
     #status .you { color: var(--gold); }
 
     /* --- layout: stage + rail --- */
@@ -65,7 +65,7 @@
     }
     .stage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
     .stage-head h2 { margin: 0; }
-    .hint { font-size: 13px; color: var(--muted); }
+    .hint { font-size: 14px; color: var(--muted); }
     .stage-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 
     /* --- opening night summary --- */
@@ -77,10 +77,10 @@
     /* --- property cards (auction) --- */
     .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
     .pcard { background: var(--well); border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
-    .pcard .pc-name { font-size: 15px; }
-    .pcard .pc-meta { font-size: 12px; color: var(--muted); }
-    .pcard .pc-price { font-size: 13px; color: var(--gold); margin-top: auto; }
-    .pcard.future { opacity: 0.55; }
+    .pcard .pc-name { font-size: 16px; }
+    .pcard .pc-meta { font-size: 13px; color: var(--muted); }
+    .pcard .pc-price { font-size: 14px; color: var(--gold); margin-top: auto; }
+    .pcard.future { opacity: 0.8; border-style: dashed; }
     .pcard.on-block { border-color: var(--gold); }
     .pcard button { margin: 6px 0 0; }
 
@@ -100,10 +100,10 @@
     .track { background: var(--well); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
     .track .t-name { display: flex; justify-content: space-between; }
     .track .t-slots { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
-    .tslot { font-size: 12px; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 4px; }
-    .tslot.empty { opacity: 0.35; }
+    .tslot { font-size: 13px; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 4px; }
+    .tslot.empty { opacity: 0.6; }
     .needs { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .needs th { text-align: left; font-weight: normal; color: var(--faint); font-size: 12px; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); }
+    .needs th { text-align: left; font-weight: normal; color: var(--faint); font-size: 13px; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); }
     .needs td { padding: 8px 8px 8px 0; border-bottom: 1px dotted var(--line); vertical-align: middle; }
     .needs .short { color: #f0a15b; }
     .needs .ok { color: var(--go); }
@@ -116,7 +116,7 @@
     .region.out { fill: #14100b; fill-opacity: 0.4; stroke: #3a3226; stroke-width: 1; stroke-dasharray: 5 5; }
     .region-label { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; text-anchor: middle; }
     .region-label.in { fill: var(--muted); }
-    .region-label.out { fill: #5c5140; }
+    .region-label.out { fill: #8a7c63; }
     .edge { fill: none; stroke-linecap: round; stroke-linejoin: round; }
     .edge.in.local { stroke: #5a4a30; stroke-width: 1.6; }
     .edge.in.cross { stroke: #9a7442; stroke-width: 1.8; stroke-dasharray: 8 4; opacity: 0.82; }
@@ -139,31 +139,38 @@
     .city-info { font-size: 8.5px; fill: var(--faint); text-anchor: middle; }
     .badge rect { fill: #1e5c2e; stroke: var(--go); stroke-width: 1; }
     .badge text { fill: #c8f7d0; font-size: 10px; font-weight: bold; text-anchor: middle; }
+    /* full map: zoom and pan */
+    .map-frame { position: relative; }
+    .map.zoomable { cursor: grab; touch-action: pan-y; }
+    .map.zoomable.panning { cursor: grabbing; }
+    .map-zoom { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; flex-direction: column; gap: 4px; }
+    .map-zoom button { min-width: 36px; height: 36px; margin: 0; padding: 0 8px; font-size: 18px; background: #221d16e6; }
+    .map-zoom button[aria-label="Show the whole map"] { font-size: 14px; }
     /* thumbnail: shapes only, no text */
     .thumb { cursor: zoom-in; border-radius: 6px; }
     .thumb .city-name, .thumb .city-info, .thumb .edge-label, .thumb .region-label, .thumb .badge { display: none; }
     .thumb .city .node { stroke-width: 3; }
 
     /* --- legend --- */
-    .legend { font-size: 12px; color: #c9bb9f; line-height: 1.7; margin-top: 8px; }
+    .legend { font-size: 13px; color: #c9bb9f; line-height: 1.7; margin-top: 8px; }
     .legend .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 1px solid var(--line-strong); margin-right: 5px; vertical-align: -1px; }
     .legend .swatch.s0 { background: #c0392b; } .legend .swatch.s1 { background: #27ae60; }
     .legend .swatch.s2 { background: #2980b9; } .legend .swatch.s3 { background: #8e44ad; }
 
     /* --- rail --- */
     #turn-order { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
-    .tchip { padding: 2px 10px; border: 1px solid #4a4032; border-radius: 999px; font-size: 12px; color: #c9bb9f; }
+    .tchip { padding: 2px 10px; border: 1px solid #4a4032; border-radius: 999px; font-size: 13px; color: #c9bb9f; }
     .tchip.active { background: #ffd70022; border-color: var(--gold); color: var(--gold); }
     .tchip.next { border-style: dashed; }
     .tchip.me { outline: 1px solid var(--gold); outline-offset: 1px; }
-    .tsep { color: var(--line-strong); margin: 0 3px; font-size: 11px; }
+    .tsep { color: var(--faint); margin: 0 3px; font-size: 12px; }
     .prow { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
     .pname { flex: 1 1 auto; }
-    .pmeta { color: var(--muted); font-size: 12px; }
-    .prop { border-left: 3px solid var(--line-strong); padding-left: 8px; margin: 2px 0 4px 4px; font-size: 12px; color: #c9bb9f; }
+    .pmeta { color: var(--muted); font-size: 13px; }
+    .prop { border-left: 3px solid var(--line-strong); padding-left: 8px; margin: 2px 0 4px 4px; font-size: 13px; color: #c9bb9f; }
     .turn-highlight .pname { color: var(--gold); }
     .rail-head { display: flex; justify-content: space-between; align-items: baseline; }
-    #log { max-height: 160px; overflow-y: auto; font-size: 12px; color: var(--muted); }
+    #log { max-height: 320px; overflow-y: auto; font-size: 13px; color: var(--muted); }
     #fallback:empty { display: none; }
   </style>
 </head>
@@ -197,7 +204,7 @@
           <span class="pill" id="lobby-status"></span>
         </div>
         <div id="roster"></div>
-        <div id="room-config" style="font-size: 13px; color: #a89a7f; margin-top: 8px"></div>
+        <div id="room-config" style="font-size: 14px; color: #a89a7f; margin-top: 8px"></div>
         <div class="row" style="margin-top:10px">
           <button id="btn-add-bot">Add bot</button>
           <button id="btn-start">Start game</button>

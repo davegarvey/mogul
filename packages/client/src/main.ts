@@ -2,6 +2,8 @@ import { DEFAULT_RULES, buildCost, pathCosts, playerById, propertyDef, slotCost,
 import type { Action, GameState, GameRules } from "@mogul/engine";
 import type { ClientMessage, RoomState, ServerMessage, SnapshotEnvelope } from "@mogul/protocol";
 import { CITY_POS, EDGE_LABELS, EDGE_ROUTES, REGION_ANCHOR, REGION_POLYGON, VIEWBOX, assertLayoutComplete } from "./map-layout.js";
+import { MAX_ZOOM, panBy, zoomAt, zoomLevel } from "./map-zoom.js";
+import type { View } from "./map-zoom.js";
 import {
   STEPS,
   auctionModel,
@@ -51,6 +53,8 @@ let myIsHost = false;
 let stage: StageId = "auction";
 let lastPhase: string | null = null;
 let mapExpanded = false;
+/** Zoomed view of the full map; kept across re-renders so a snapshot doesn't reset it. */
+let mapView: View = { ...VIEWBOX };
 /** A command is in flight: controls stay disabled until the next snapshot or rejection. */
 let awaiting = false;
 /** The WebSocket is open; controls are disabled while it is down. */
@@ -327,7 +331,7 @@ function summaryCard(summary: NonNullable<ReturnType<typeof openingNightSummary>
   const table = el("table");
   for (const r of summary.rows) {
     const tr = el("tr");
-    tr.append(el("td", undefined, `${r.name}${r.playerId === mySeatId ? " (you)" : ""}`));
+    tr.append(el("td", undefined, r.name));
     tr.append(el("td", "num", `${r.lit} lit`));
     tr.append(el("td", "num money", `$${r.income}`));
     table.append(tr);
@@ -411,7 +415,7 @@ function onTheBlock(s: GameState, m: ReturnType<typeof auctionModel>): HTMLEleme
   const high = el("div", "b-bid");
   high.append(el("div", "muted", "High bid"));
   high.append(el("div", "amount", `$${open.currentBid}`));
-  high.append(el("div", "muted", open.highestBidder ? `${playerName(s, open.highestBidder)}${open.highestBidder === mySeatId ? " (you)" : ""}` : ""));
+  high.append(el("div", "muted", open.highestBidder ? playerName(s, open.highestBidder) : ""));
   block.append(high);
 
   if (myTurn()) {
@@ -554,7 +558,8 @@ function mapStage(s: GameState): HTMLElement {
     "Theatre slots: 1st <b>$10</b> · 2nd <b>$15</b> · 3rd <b>$20</b> · " +
     "Slots per city: silent <b>1</b> · talkies <b>2</b> · golden age <b>3</b><br />" +
     'Studios: <span class="swatch s0"></span><span class="swatch s1"></span><span class="swatch s2"></span><span class="swatch s3"></span> · ' +
-    "Green badge: build now · Ring: your theatre · Dimmed: no route · Numbers under a city: route + slot cost";
+    "Green badge: build now · Ring: your theatre · Dimmed: no route · Numbers under a city: route + slot cost<br />" +
+    "Scroll or pinch to zoom · Drag to move around";
   card.append(legend);
   return card;
 }
@@ -607,7 +612,7 @@ function renderPlayers(s: GameState): void {
   for (const p of s.players) {
     const row = el("div", "prow");
     if (snapshot?.activeSeat === p.id) row.classList.add("turn-highlight");
-    row.append(el("span", "pname", `${p.name}${p.id === mySeatId ? " (you)" : ""}`));
+    row.append(el("span", "pname", p.name));
     row.append(el("span", "money", `$${p.cash}`));
     row.append(el("span", "pmeta", `${p.theaters.length} built · ${p.litLastNight} lit`));
     wrap.append(row);
@@ -697,7 +702,8 @@ function renderMapInto(
   const svg = svgEl("svg");
   svg.classList.add("map");
   if (opts.thumbnail) svg.classList.add("thumb");
-  svg.setAttribute("viewBox", `${VIEWBOX.x} ${VIEWBOX.y} ${VIEWBOX.width} ${VIEWBOX.height}`);
+  const view = opts.thumbnail ? VIEWBOX : mapView;
+  svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.width} ${view.height}`);
   svg.setAttribute("role", "img");
   svg.setAttribute("aria-label", opts.thumbnail ? "Exhibition map thumbnail" : "Exhibition map");
 
@@ -867,6 +873,118 @@ function renderMapInto(
   }
 
   wrap.append(svg);
+  if (!opts.thumbnail) enableZoom(wrap, svg);
+}
+
+/**
+ * Zoom and pan for the full map: wheel or pinch zooms about the pointer, a drag pans,
+ * and the buttons zoom about the centre. A drag never counts as a click on a city.
+ */
+function enableZoom(wrap: HTMLElement, svg: SVGSVGElement): void {
+  wrap.classList.add("map-frame");
+  svg.classList.add("zoomable");
+  const controls = el("div", "map-zoom");
+  const zoomIn = button("+", () => zoomAtCentre(1.5), { quiet: true });
+  const zoomOut = button("−", () => zoomAtCentre(1 / 1.5), { quiet: true });
+  const fit = button("Fit", () => apply({ ...VIEWBOX }), { quiet: true });
+  zoomIn.setAttribute("aria-label", "Zoom in");
+  zoomOut.setAttribute("aria-label", "Zoom out");
+  fit.setAttribute("aria-label", "Show the whole map");
+  controls.append(zoomIn, zoomOut, fit);
+  wrap.append(controls);
+
+  function apply(view: View): void {
+    mapView = view;
+    svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.width} ${view.height}`);
+    const level = zoomLevel(view, VIEWBOX);
+    zoomIn.disabled = level >= MAX_ZOOM;
+    zoomOut.disabled = fit.disabled = level <= 1;
+    // Zoomed in, a touch drag pans the map; at full size it scrolls the page as usual.
+    svg.style.touchAction = level > 1 ? "none" : "pan-y";
+  }
+  function toMap(clientX: number, clientY: number): { x: number; y: number } {
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: mapView.x + mapView.width / 2, y: mapView.y + mapView.height / 2 };
+    const p = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+    return { x: p.x, y: p.y };
+  }
+  /** Map units per screen pixel (the SVG letterboxes, so the larger ratio applies). */
+  function unitsPerPixel(): number {
+    const rect = svg.getBoundingClientRect();
+    return Math.max(mapView.width / rect.width, mapView.height / rect.height);
+  }
+  function zoomAtCentre(factor: number): void {
+    apply(zoomAt(mapView, VIEWBOX, factor, { x: mapView.x + mapView.width / 2, y: mapView.y + mapView.height / 2 }));
+  }
+  apply(mapView);
+
+  svg.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const pixels = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      apply(zoomAt(mapView, VIEWBOX, Math.exp(-pixels * 0.002), toMap(e.clientX, e.clientY)));
+    },
+    { passive: false },
+  );
+
+  const pointers = new Map<number, { x: number; y: number }>();
+  let dragged = false;
+  let start = { x: 0, y: 0 };
+  let pinchDistance = 0;
+  const spread = () => {
+    const [a, b] = [...pointers.values()];
+    return { distance: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+  };
+  svg.addEventListener("pointerdown", (e) => {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) {
+      dragged = false;
+      start = { x: e.clientX, y: e.clientY };
+    } else if (pointers.size === 2) {
+      pinchDistance = spread().distance;
+    }
+  });
+  svg.addEventListener("pointermove", (e) => {
+    const last = pointers.get(e.pointerId);
+    if (!last) return;
+    const now = { x: e.clientX, y: e.clientY };
+    if (pointers.size === 2) {
+      pointers.set(e.pointerId, now);
+      const { distance, mid } = spread();
+      if (pinchDistance > 0) apply(zoomAt(mapView, VIEWBOX, distance / pinchDistance, toMap(mid.x, mid.y)));
+      pinchDistance = distance;
+      dragged = true;
+      return;
+    }
+    // Capture only once a real drag starts: capturing on press would retarget the
+    // click away from the city under the pointer.
+    if (!dragged && Math.hypot(now.x - start.x, now.y - start.y) < 4) return;
+    if (!dragged) {
+      dragged = true;
+      svg.setPointerCapture(e.pointerId);
+      svg.classList.add("panning");
+    }
+    const k = unitsPerPixel();
+    apply(panBy(mapView, VIEWBOX, (last.x - now.x) * k, (last.y - now.y) * k));
+    pointers.set(e.pointerId, now);
+  });
+  const release = (e: PointerEvent) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchDistance = 0;
+    if (pointers.size === 0) svg.classList.remove("panning");
+  };
+  svg.addEventListener("pointerup", release);
+  svg.addEventListener("pointercancel", release);
+  svg.addEventListener(
+    "click",
+    (e) => {
+      if (!dragged) return;
+      dragged = false;
+      e.stopPropagation();
+    },
+    true,
+  );
 }
 
 // --- join/lobby wiring ---
